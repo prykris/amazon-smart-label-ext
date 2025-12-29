@@ -749,7 +749,7 @@ please use the extension on Amazon Seller Central pages.\`;
   showWelcomeNotification() {
     chrome.notifications.create({
       type: 'basic',
-      iconUrl: 'icons/icon48.png',
+      iconUrl: 'icons/logo-48.png',
       title: 'Amazon FNSKU Label Printer Installed!',
       message: 'Visit Amazon Seller Central to start printing FNSKU labels. Look for the 🖨️ button next to your products.'
     });

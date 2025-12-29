@@ -139,32 +139,24 @@ class AmazonFNSKUExtension {
           return;
         }
         
-        // Find the action container to inject our button
-        const actionContainer = this.findActionContainer(row);
-        
-        if (actionContainer) {
-          try {
-            // Create and inject the smart button
-            const smartButton = this.uiController.createSmartButton(row);
-            
-            // Insert before existing action buttons
-            const existingButton = actionContainer.querySelector('kat-dropdown-button');
-            if (existingButton) {
-              actionContainer.insertBefore(smartButton, existingButton);
-            } else {
-              actionContainer.appendChild(smartButton);
-            }
-            
-            // Mark as processed
-            this.processedRows.add(sku);
-            
-            console.debug(`Injected smart button for SKU: ${sku}`);
-            
-          } catch (error) {
-            console.warn(`Failed to inject button for SKU ${sku}:`, error);
-          }
-        } else {
-          console.debug(`No action container found for SKU: ${sku}`);
+        // Create our own row for the smart button
+        try {
+          // Create and inject the smart button
+          const smartButton = this.uiController.createSmartButton(row);
+          
+          // Create a dedicated row for our button
+          const smartLabelRow = this.createSmartLabelRow(smartButton);
+          
+          // Insert the row after the product row
+          row.parentNode.insertBefore(smartLabelRow, row.nextSibling);
+          
+          // Mark as processed
+          this.processedRows.add(sku);
+          
+          console.debug(`Injected smart button row for SKU: ${sku}`);
+          
+        } catch (error) {
+          console.warn(`Failed to inject button for SKU ${sku}:`, error);
         }
       });
       
@@ -174,55 +166,40 @@ class AmazonFNSKUExtension {
   }
 
   /**
-   * Find the action container within a product row
-   * @param {HTMLElement} row - Product row element
-   * @returns {HTMLElement|null} Action container element
+   * Create a dedicated row for the smart label button
+   * @param {HTMLElement} smartButton - Smart button container
+   * @returns {HTMLElement} Smart label row element
    */
-  findActionContainer(row) {
-    // Strategy 1: Look for Action-module class pattern
-    let actionContainer = row.querySelector('div[class*="Action-module"]');
+  createSmartLabelRow(smartButton) {
+    const smartLabelRow = document.createElement('div');
+    smartLabelRow.className = 'smart-label-row';
+    smartLabelRow.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 8px 16px;
+      background: #f8f9fa;
+      border-top: 1px solid #e9ecef;
+      margin-top: 2px;
+      border-radius: 4px;
+      width: 100%;
+      box-sizing: border-box;
+    `;
     
-    if (actionContainer) {
-      return actionContainer;
-    }
+    // Add a label for the button
+    const label = document.createElement('span');
+    label.textContent = 'FNSKU Label: ';
+    label.style.cssText = `
+      font-size: 12px;
+      color: #666;
+      margin-right: 8px;
+      font-weight: 500;
+    `;
     
-    // Strategy 2: Look for container with dropdown button
-    const dropdownButton = row.querySelector('kat-dropdown-button');
-    if (dropdownButton) {
-      return dropdownButton.parentElement;
-    }
+    smartLabelRow.appendChild(label);
+    smartLabelRow.appendChild(smartButton);
     
-    // Strategy 3: Look for the last cell in the row (usually actions)
-    const cells = row.querySelectorAll('div[class*="TableCell-module"]');
-    if (cells.length > 0) {
-      const lastCell = cells[cells.length - 1];
-      // Check if it looks like an action cell (small width, contains buttons)
-      const style = window.getComputedStyle(lastCell);
-      const width = parseInt(style.width);
-      
-      if (width < 100 || lastCell.querySelector('button, kat-dropdown-button')) {
-        return lastCell;
-      }
-    }
-    
-    // Strategy 4: Create action container if none found
-    const lastChild = row.lastElementChild;
-    if (lastChild) {
-      const actionDiv = document.createElement('div');
-      actionDiv.className = 'injected-action-container';
-      actionDiv.style.cssText = `
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 8px;
-        min-width: 120px;
-      `;
-      
-      row.appendChild(actionDiv);
-      return actionDiv;
-    }
-    
-    return null;
+    return smartLabelRow;
   }
 
   /**
@@ -269,9 +246,12 @@ class AmazonFNSKUExtension {
       this.observer = null;
     }
     
-    // Remove injected buttons
+    // Remove injected buttons and rows
     const injectedButtons = document.querySelectorAll('.smart-label-container');
     injectedButtons.forEach(button => button.remove());
+    
+    const injectedRows = document.querySelectorAll('.smart-label-row');
+    injectedRows.forEach(row => row.remove());
     
     // Close any open dialogs
     if (this.uiController) {

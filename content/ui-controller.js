@@ -57,7 +57,7 @@ class UIController {
     const quantityInput = document.createElement('input');
     quantityInput.type = 'number';
     quantityInput.min = '1';
-    quantityInput.max = '99';
+    quantityInput.max = '1000';
     quantityInput.value = '1';
     quantityInput.className = 'quantity-input';
     quantityInput.title = 'Number of labels';
@@ -70,7 +70,7 @@ class UIController {
     quantityInput.addEventListener('change', (e) => {
       const value = parseInt(e.target.value);
       if (value < 1) e.target.value = '1';
-      if (value > 99) e.target.value = '99';
+      if (value > 1000) e.target.value = '1000';
     });
 
     // Button click handler
@@ -124,6 +124,15 @@ class UIController {
           this.pdfGenerator.savePDF(doc, filename);
           this.showNotification(`Downloaded ${qty} label(s) for ${productData.sku}`, 'success');
         }
+
+        // Add to download history
+        await this.addToDownloadHistory({
+          sku: productData.sku,
+          fnsku: productData.fnsku,
+          asin: productData.asin,
+          title: productData.title,
+          quantity: qty
+        });
       }
     } catch (error) {
       console.error('Label generation error:', error);
@@ -480,6 +489,21 @@ class UIController {
       await chrome.storage.sync.set({ fnskuLabelSettings: this.settings });
     } catch (error) {
       console.warn('Failed to save settings:', error);
+    }
+  }
+
+  /**
+   * Add item to download history via background script
+   * @param {Object} item - Download history item
+   */
+  async addToDownloadHistory(item) {
+    try {
+      await chrome.runtime.sendMessage({
+        action: 'addToDownloadHistory',
+        data: item
+      });
+    } catch (error) {
+      console.warn('Failed to add to download history:', error);
     }
   }
 }

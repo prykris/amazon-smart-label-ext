@@ -408,8 +408,8 @@ class PopupController {
     }
 
     // Validate quantity
-    if (data.quantity < 1 || data.quantity > 99) {
-      this.setFieldError('manual-quantity', 'Quantity must be between 1 and 99');
+    if (data.quantity < 1 || data.quantity > 1000) {
+      this.setFieldError('manual-quantity', 'Quantity must be between 1 and 1000');
       isValid = false;
     } else {
       this.setFieldSuccess('manual-quantity');

@@ -7,8 +7,14 @@
 .smart-label-container {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-right: 8px;
+  gap: 6px;
+  margin: 4px 0;
+  padding: 4px 8px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+  width: fit-content;
+  min-width: 120px;
 }
 
 /* Smart Print Button */
@@ -80,7 +86,7 @@
 
 /* Quantity Input */
 .quantity-input {
-  width: 40px;
+  width: 50px;
   height: 32px;
   border: 1px solid #D5D9D9;
   border-radius: 6px;
@@ -89,6 +95,7 @@
   padding: 4px;
   background: #fff;
   transition: border-color 0.2s ease;
+  flex-shrink: 0;
 }
 
 .quantity-input:focus {
@@ -103,8 +110,35 @@
 
 /* Injected Action Container */
 .injected-action-container {
-  border-left: 1px solid #e7e7e7;
-  background: #fafafa;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+  margin-top: 4px;
+  border-radius: 4px;
+}
+
+/* Smart Label Row - when injected as its own row */
+.smart-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 8px 16px;
+  background: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+  margin-top: 2px;
+  border-radius: 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.smart-label-row .smart-label-container {
+  margin: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
 }
 
 /* Notifications */

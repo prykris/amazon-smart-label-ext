@@ -120,6 +120,12 @@ class BackgroundService {
           sendResponse(manualResult);
           break;
 
+        case 'addToDownloadHistory':
+          // Handle adding item to download history
+          const historyResult = await this.addToDownloadHistory(request.data);
+          sendResponse(historyResult);
+          break;
+
         default:
           sendResponse({ success: false, error: 'Unknown action' });
       }
@@ -753,6 +759,48 @@ please use the extension on Amazon Seller Central pages.\`;
       title: 'Amazon FNSKU Label Printer Installed!',
       message: 'Visit Amazon Seller Central to start printing FNSKU labels. Look for the 🖨️ button next to your products.'
     });
+  }
+
+  /**
+   * Add item to download history
+   * @param {Object} item - Download history item
+   * @returns {Object} Result of the operation
+   */
+  async addToDownloadHistory(item) {
+    try {
+      // Get current download history
+      const result = await chrome.storage.local.get(['downloadHistory']);
+      let downloadHistory = result.downloadHistory || [];
+
+      // Add new item to the beginning
+      downloadHistory.unshift({
+        sku: item.sku,
+        fnsku: item.fnsku,
+        asin: item.asin || '',
+        title: item.title || '',
+        quantity: item.quantity,
+        timestamp: new Date().toISOString()
+      });
+
+      // Keep only last 50 items
+      if (downloadHistory.length > 50) {
+        downloadHistory = downloadHistory.slice(0, 50);
+      }
+
+      // Save back to storage
+      await chrome.storage.local.set({ downloadHistory });
+
+      return {
+        success: true,
+        message: 'Added to download history'
+      };
+    } catch (error) {
+      console.error('Failed to add to download history:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
   }
 }
 

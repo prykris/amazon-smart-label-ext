@@ -1,0 +1,440 @@
+/**
+ * Content Script Styles
+ * Styles for smart buttons and UI elements injected into Amazon Seller Central
+ */
+
+/* Smart Label Container */
+.smart-label-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+}
+
+/* Smart Print Button */
+.smart-print-btn {
+  background: #fff;
+  border: 1px solid #D5D9D9;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(15, 17, 17, 0.15);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 6px 10px;
+  transition: all 0.2s ease;
+  min-width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.smart-print-btn:hover {
+  background: #f7f8f8;
+  border-color: #c7c7c7;
+  box-shadow: 0 2px 8px rgba(15, 17, 17, 0.25);
+}
+
+.smart-print-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 3px rgba(15, 17, 17, 0.2);
+}
+
+.smart-print-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Modifier Key States */
+.smart-print-btn.ctrl-held {
+  background: #e3f2fd;
+  border-color: #2196f3;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+.smart-print-btn.ctrl-held:hover {
+  background: #bbdefb;
+  border-color: #1976d2;
+}
+
+.smart-print-btn.shift-held {
+  background: #e8f5e8;
+  border-color: #4caf50;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.smart-print-btn.shift-held:hover {
+  background: #c8e6c9;
+  border-color: #388e3c;
+}
+
+.smart-print-btn.loading {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+/* Quantity Input */
+.quantity-input {
+  width: 40px;
+  height: 32px;
+  border: 1px solid #D5D9D9;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 12px;
+  padding: 4px;
+  background: #fff;
+  transition: border-color 0.2s ease;
+}
+
+.quantity-input:focus {
+  outline: none;
+  border-color: #0066c0;
+  box-shadow: 0 0 0 2px rgba(0, 102, 192, 0.2);
+}
+
+.quantity-input:invalid {
+  border-color: #d13212;
+}
+
+/* Injected Action Container */
+.injected-action-container {
+  border-left: 1px solid #e7e7e7;
+  background: #fafafa;
+}
+
+/* Notifications */
+.fnsku-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 500;
+  font-size: 14px;
+  z-index: 10000;
+  max-width: 300px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: slideIn 0.3s ease-out;
+}
+
+.fnsku-notification.success {
+  background: #4caf50;
+}
+
+.fnsku-notification.error {
+  background: #f44336;
+}
+
+.fnsku-notification.warning {
+  background: #ff9800;
+}
+
+.fnsku-notification.info {
+  background: #2196f3;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Configuration Dialog */
+.fnsku-config-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.dialog-content {
+  position: relative;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow: hidden;
+  animation: dialogAppear 0.3s ease-out;
+}
+
+@keyframes dialogAppear {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #e7e7e7;
+}
+
+.dialog-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #232f3e;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.close-btn:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.dialog-body {
+  padding: 20px 24px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.config-section {
+  margin-bottom: 24px;
+}
+
+.config-section:last-child {
+  margin-bottom: 0;
+}
+
+.config-section h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #232f3e;
+}
+
+.config-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #D5D9D9;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+  transition: border-color 0.2s ease;
+}
+
+.config-input:focus {
+  outline: none;
+  border-color: #0066c0;
+  box-shadow: 0 0 0 2px rgba(0, 102, 192, 0.2);
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.input-group label {
+  min-width: 80px;
+  font-size: 14px;
+  color: #555;
+  font-weight: 500;
+}
+
+.input-group .config-input {
+  flex: 1;
+  max-width: 120px;
+}
+
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #555;
+  cursor: pointer;
+}
+
+.config-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: #0066c0;
+}
+
+.custom-size-section {
+  background: #f8f9fa;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.dialog-footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 16px 24px 20px;
+  border-top: 1px solid #e7e7e7;
+  background: #f8f9fa;
+}
+
+.save-btn,
+.save-print-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.save-btn {
+  background: #fff;
+  color: #0066c0;
+  border: 1px solid #0066c0;
+}
+
+.save-btn:hover {
+  background: #f0f8ff;
+}
+
+.save-print-btn {
+  background: #0066c0;
+  color: #fff;
+}
+
+.save-print-btn:hover {
+  background: #004d99;
+}
+
+.save-btn:active,
+.save-print-btn:active {
+  transform: translateY(1px);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .dialog-content {
+    width: 95%;
+    margin: 20px;
+  }
+  
+  .dialog-header,
+  .dialog-body,
+  .dialog-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  
+  .input-group {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  
+  .input-group label {
+    min-width: auto;
+  }
+  
+  .input-group .config-input {
+    max-width: none;
+  }
+  
+  .smart-label-container {
+    flex-direction: column;
+    gap: 2px;
+  }
+  
+  .quantity-input {
+    width: 36px;
+    height: 28px;
+    font-size: 11px;
+  }
+}
+
+/* High DPI Display Support */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .smart-print-btn {
+    border-width: 0.5px;
+  }
+  
+  .quantity-input {
+    border-width: 0.5px;
+  }
+}
+
+/* Dark Mode Support (if Amazon implements it) */
+@media (prefers-color-scheme: dark) {
+  .smart-print-btn {
+    background: #2a2a2a;
+    border-color: #555;
+    color: #fff;
+  }
+  
+  .smart-print-btn:hover {
+    background: #3a3a3a;
+    border-color: #666;
+  }
+  
+  .quantity-input {
+    background: #2a2a2a;
+    border-color: #555;
+    color: #fff;
+  }
+  
+  .fnsku-notification {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Print Styles */
+@media print {
+  .smart-label-container,
+  .fnsku-config-dialog,
+  .fnsku-notification {
+    display: none !important;
+  }
+}

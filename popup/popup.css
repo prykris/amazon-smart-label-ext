@@ -1,0 +1,471 @@
+/**
+ * Compact Popup Interface Styles
+ * Streamlined design for the extension popup
+ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #333;
+  background: #fff;
+  width: 380px;
+  min-height: 500px;
+}
+
+.popup-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Compact Header */
+.compact-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.tab-navigation {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tab-navigation::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-btn {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: #666;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  background: #e9ecef;
+  color: #333;
+}
+
+.tab-btn.active {
+  background: #007bff;
+  color: white;
+}
+
+.settings-tab {
+  font-size: 14px;
+  padding: 6px 8px;
+}
+
+.toggle-btn {
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: #666;
+  font-size: 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toggle-btn:hover {
+  background: #e9ecef;
+}
+
+.toggle-btn.disabled .toggle-icon {
+  color: #dc3545;
+}
+
+/* Tab Content */
+.tab-content-container {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.tab-content {
+  display: none;
+  padding: 16px;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* Downloads Section */
+.downloads-section {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.downloads-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid #e0e0e0;
+  font-size: 12px;
+}
+
+.downloads-stats {
+  color: #666;
+  font-size: 11px;
+}
+
+.clear-btn {
+  padding: 4px 6px;
+  border: none;
+  background: transparent;
+  color: #666;
+  font-size: 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clear-btn:hover {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.downloads-list {
+  flex: 1;
+  min-height: 300px;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  background: #f8f9fa;
+  overflow-y: auto;
+}
+
+.no-downloads {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #666;
+  text-align: center;
+}
+
+.no-downloads p {
+  margin: 4px 0;
+}
+
+.no-downloads .hint {
+  font-size: 12px;
+  color: #999;
+}
+
+.download-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e9ecef;
+  background: white;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.download-item.available:hover {
+  background: #f0f8ff;
+  border-left: 3px solid #007bff;
+}
+
+.download-item.unavailable {
+  background: #f8f9fa;
+  color: #6c757d;
+  cursor: default;
+  opacity: 0.7;
+}
+
+.download-item.unavailable .download-icon {
+  opacity: 0.5;
+}
+
+.download-item:last-child {
+  border-bottom: none;
+}
+
+.download-icon {
+  font-size: 16px;
+  margin-right: 8px;
+  color: #28a745;
+}
+
+.download-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.download-name {
+  font-weight: 500;
+  font-size: 13px;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.download-details {
+  font-size: 11px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.download-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.download-time {
+  font-size: 11px;
+  color: #666;
+  text-align: right;
+  line-height: 1.2;
+  min-width: 60px;
+}
+
+.remove-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+}
+
+.remove-btn:hover {
+  background: #c82333;
+}
+
+/* Manual Entry Form */
+.manual-entry-section {
+  height: 100%;
+}
+
+.compact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.form-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #555;
+}
+
+.form-input {
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: border-color 0.2s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.form-input:invalid {
+  border-color: #dc3545;
+}
+
+.form-group.error .form-input {
+  border-color: #dc3545;
+}
+
+.form-group.success .form-input {
+  border-color: #28a745;
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.primary-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  background: #007bff;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.primary-btn:hover {
+  background: #0056b3;
+}
+
+.primary-btn:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+}
+
+.primary-btn.loading {
+  background: #6c757d;
+  cursor: wait;
+}
+
+.secondary-btn {
+  padding: 10px 16px;
+  border: 1px solid #ddd;
+  background: white;
+  color: #666;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.secondary-btn:hover {
+  background: #f8f9fa;
+  border-color: #adb5bd;
+}
+
+/* Settings Section */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setting-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #555;
+}
+
+.setting-input {
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+  background: white;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  margin: 0;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Notifications */
+.popup-notification {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 1000;
+  animation: slideDown 0.3s ease;
+}
+
+.popup-notification.success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.popup-notification.error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.popup-notification.info {
+  background: #d1ecf1;
+  color: #0c5460;
+  border: 1px solid #bee5eb;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 400px) {
+  body {
+    width: 320px;
+  }
+  
+  .form-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+}

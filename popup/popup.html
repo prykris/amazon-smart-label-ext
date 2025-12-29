@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amazon FNSKU Label Printer</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+  <div class="popup-container">
+    <!-- Compact Header -->
+    <div class="compact-header">
+      <div class="tab-navigation">
+        <button class="tab-btn active" data-tab="downloads">Downloads</button>
+        <button class="tab-btn" data-tab="manual">Manual Entry</button>
+        <button class="tab-btn settings-tab" data-tab="settings" title="">⚙️</button>
+      </div>
+      <button id="toggle-extension" class="toggle-btn" title="Toggle Extension">
+        <span class="toggle-icon">⏸️</span>
+      </button>
+    </div>
+
+    <!-- Tab Content Container -->
+    <div class="tab-content-container">
+
+      <!-- Downloads Tab -->
+      <div id="downloads-tab" class="tab-content active">
+        <div class="downloads-section">
+          <div id="downloads-list" class="downloads-list">
+            <div class="no-downloads">
+              <p>No labels generated yet</p>
+              <p class="hint">Use Manual Entry or visit Amazon Seller Central to generate labels</p>
+            </div>
+          </div>
+          
+          <div class="downloads-footer">
+            <div class="downloads-stats">
+              <span id="downloads-count">0 labels</span>
+            </div>
+            <button id="clear-history" class="clear-btn" title="Clear History">🗑️</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Manual Entry Tab -->
+      <div id="manual-tab" class="tab-content">
+        <div class="manual-entry-section">
+          <form id="manual-entry-form" class="compact-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="manual-sku">SKU *</label>
+                <input type="text" id="manual-sku" class="form-input" placeholder="e.g., 2xArmyFBA" required>
+              </div>
+              <div class="form-group">
+                <label for="manual-fnsku">FNSKU *</label>
+                <input type="text" id="manual-fnsku" class="form-input" placeholder="e.g., X002HB9ZDL" pattern="^[A-Z0-9]{10}$" required>
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="manual-asin">ASIN</label>
+                <input type="text" id="manual-asin" class="form-input" placeholder="e.g., B0FXH65FKG" pattern="^B[0-9A-Z]{9}$">
+              </div>
+              <div class="form-group">
+                <label for="manual-quantity">Qty</label>
+                <input type="number" id="manual-quantity" class="form-input" min="1" max="99" value="1">
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="manual-title">Product Title</label>
+              <input type="text" id="manual-title" class="form-input" placeholder="Optional: Product title">
+            </div>
+            
+            <div class="form-actions">
+              <button type="button" id="load-sample" class="secondary-btn">Sample</button>
+              <button type="button" id="clear-form" class="secondary-btn">Clear</button>
+              <button type="submit" id="generate-manual" class="primary-btn">Generate Label</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Settings Tab -->
+      <div id="settings-tab" class="tab-content">
+        <div class="settings-section">
+          <div class="setting-group">
+            <label for="default-template">Template</label>
+            <select id="default-template" class="setting-input">
+              <option value="thermal_57x32">Thermal 57x32mm</option>
+              <option value="thermal_57x32_minimal">Thermal 57x32mm (Minimal)</option>
+              <option value="shipping_4x6">Shipping 4"x6"</option>
+              <option value="custom">Custom Size</option>
+            </select>
+          </div>
+          
+          <div class="setting-group">
+            <label for="default-barcode">Barcode</label>
+            <select id="default-barcode" class="setting-input">
+              <option value="CODE128">CODE128</option>
+              <option value="CODE39">CODE39</option>
+              <option value="EAN13">EAN13</option>
+            </select>
+          </div>
+          
+          <div class="setting-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="default-include-images">
+              <span class="checkbox-text">Include product images</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="auto-extract">
+              <span class="checkbox-text">Auto-extract on page load</span>
+            </label>
+          </div>
+          
+          <div class="settings-actions">
+            <button id="reset-settings" class="secondary-btn">Reset</button>
+            <button id="save-settings" class="primary-btn">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <script src="../lib/jspdf.umd.min.js"></script>
+  <script src="../lib/jsbarcode.all.min.js"></script>
+  <script src="popup.js"></script>
+</body>
+
+</html>

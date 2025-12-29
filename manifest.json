@@ -1,0 +1,103 @@
+{
+    "manifest_version": 3,
+    "name": "Amazon FNSKU Smart Label Printer",
+    "version": "1.0.0",
+    "description": "Generate and print FNSKU labels directly from Amazon Seller Central inventory pages with advanced configuration options.",
+    "permissions": [
+        "activeTab",
+        "scripting",
+        "storage",
+        "tabs",
+        "notifications"
+    ],
+    "host_permissions": [
+        "https://sellercentral.amazon.com/*",
+        "https://sellercentral.amazon.ca/*",
+        "https://sellercentral.amazon.co.uk/*",
+        "https://sellercentral.amazon.de/*",
+        "https://sellercentral.amazon.fr/*",
+        "https://sellercentral.amazon.it/*",
+        "https://sellercentral.amazon.es/*",
+        "https://sellercentral.amazon.co.jp/*",
+        "https://sellercentral.amazon.com.au/*",
+        "https://sellercentral.amazon.in/*",
+        "https://sellercentral-europe.amazon.com/*"
+    ],
+    "content_scripts": [
+        {
+            "matches": [
+                "https://sellercentral.amazon.com/*",
+                "https://sellercentral.amazon.ca/*",
+                "https://sellercentral.amazon.co.uk/*",
+                "https://sellercentral.amazon.de/*",
+                "https://sellercentral.amazon.fr/*",
+                "https://sellercentral.amazon.it/*",
+                "https://sellercentral.amazon.es/*",
+                "https://sellercentral.amazon.co.jp/*",
+                "https://sellercentral.amazon.com.au/*",
+                "https://sellercentral.amazon.in/*",
+                "https://sellercentral-europe.amazon.com/*"
+            ],
+            "js": [
+                "lib/jspdf.umd.min.js",
+                "lib/jsbarcode.all.min.js",
+                "content/extractor.js",
+                "content/pdf-generator.js",
+                "content/ui-controller.js",
+                "content/content.js"
+            ],
+            "css": [
+                "styles/content.css"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "background": {
+        "service_worker": "background/background.js"
+    },
+    "action": {
+        "default_popup": "popup/popup.html",
+        "default_title": "Amazon FNSKU Label Printer",
+        "default_icon": {
+            "16": "icons/logo-16.png",
+            "48": "icons/logo-48.png",
+            "128": "icons/logo-128.png"
+        }
+    },
+    "icons": {
+        "16": "icons/logo-16.png",
+        "32": "icons/logo-32.png",
+        "34": "icons/logo-34.png",
+        "48": "icons/logo-48.png",
+        "128": "icons/logo-128.png"
+    },
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "styles/dialog.css",
+                "lib/jspdf.umd.min.js",
+                "lib/jsbarcode.all.min.js"
+            ],
+            "matches": [
+                "https://sellercentral.amazon.com/*",
+                "https://sellercentral.amazon.ca/*",
+                "https://sellercentral.amazon.co.uk/*",
+                "https://sellercentral.amazon.de/*",
+                "https://sellercentral.amazon.fr/*",
+                "https://sellercentral.amazon.it/*",
+                "https://sellercentral.amazon.es/*",
+                "https://sellercentral.amazon.co.jp/*",
+                "https://sellercentral.amazon.com.au/*",
+                "https://sellercentral.amazon.in/*",
+                "https://sellercentral-europe.amazon.com/*"
+            ]
+        },
+        {
+            "resources": [
+                "lib/jspdf.umd.min.js",
+                "lib/jsbarcode.all.min.js"
+            ],
+            "matches": ["<all_urls>"]
+        }
+    ]
+}

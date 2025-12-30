@@ -44,6 +44,13 @@ class BackgroundService {
         template: 'thermal_57x32',
         barcodeFormat: 'CODE128',
         includeImage: false,
+        includeBarcode: true,
+        includeFnsku: true,
+        includeSku: true,
+        includeTitle: true,
+        autoOpenTabs: false,
+        debugMode: false,
+        autoExtract: true,
         fontSize: {
           fnsku: 8,
           sku: 11,
@@ -213,7 +220,25 @@ class BackgroundService {
    */
   async saveSettings(settings) {
     try {
-      await chrome.storage.sync.set(settings);
+      console.log('Background: Received settings to save:', settings);
+      
+      // Handle both old and new settings structure
+      const settingsToSave = {};
+      
+      if (settings.labelSettings) {
+        // New structure from popup
+        settingsToSave.fnskuLabelSettings = settings.labelSettings;
+      } else if (settings.fnskuLabelSettings) {
+        // Old structure - keep as is
+        settingsToSave.fnskuLabelSettings = settings.fnskuLabelSettings;
+      } else {
+        // Direct settings object
+        settingsToSave.fnskuLabelSettings = settings;
+      }
+      
+      console.log('Background: Saving to storage:', settingsToSave);
+      await chrome.storage.sync.set(settingsToSave);
+      console.log('Background: Settings saved successfully');
 
       // Notify all Amazon Seller Central tabs about settings change
       const tabs = await chrome.tabs.query({

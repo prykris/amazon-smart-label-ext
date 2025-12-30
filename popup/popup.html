@@ -34,7 +34,7 @@
               <p class="hint">Use Manual Entry or visit Amazon Seller Central to generate labels</p>
             </div>
           </div>
-          
+
           <div class="downloads-footer">
             <div class="downloads-stats">
               <span id="downloads-count">0 labels</span>
@@ -55,26 +55,28 @@
               </div>
               <div class="form-group">
                 <label for="manual-fnsku">FNSKU *</label>
-                <input type="text" id="manual-fnsku" class="form-input" placeholder="e.g., X002HB9ZDL" pattern="^[A-Z0-9]{10}$" required>
+                <input type="text" id="manual-fnsku" class="form-input" placeholder="e.g., X002HB9ZDL"
+                  pattern="^[A-Z0-9]{10}$" required>
               </div>
             </div>
-            
+
             <div class="form-row">
               <div class="form-group">
                 <label for="manual-asin">ASIN</label>
-                <input type="text" id="manual-asin" class="form-input" placeholder="e.g., B0FXH65FKG" pattern="^B[0-9A-Z]{9}$">
+                <input type="text" id="manual-asin" class="form-input" placeholder="e.g., B0FXH65FKG"
+                  pattern="^B[0-9A-Z]{9}$">
               </div>
               <div class="form-group">
                 <label for="manual-quantity">Qty</label>
                 <input type="number" id="manual-quantity" class="form-input" min="1" max="1000" value="1">
               </div>
             </div>
-            
+
             <div class="form-group">
               <label for="manual-title">Product Title</label>
               <input type="text" id="manual-title" class="form-input" placeholder="Optional: Product title">
             </div>
-            
+
             <div class="form-actions">
               <button type="button" id="load-sample" class="secondary-btn">Sample</button>
               <button type="button" id="clear-form" class="secondary-btn">Clear</button>
@@ -96,7 +98,7 @@
               <option value="custom">Custom Size</option>
             </select>
           </div>
-          
+
           <div class="setting-group">
             <label for="default-barcode">Barcode</label>
             <select id="default-barcode" class="setting-input">
@@ -105,18 +107,79 @@
               <option value="EAN13">EAN13</option>
             </select>
           </div>
-          
+
           <div class="setting-group">
-            <label class="checkbox-label">
-              <input type="checkbox" id="default-include-images">
-              <span class="checkbox-text">Include product images</span>
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" id="auto-extract">
-              <span class="checkbox-text">Auto-extract on page load</span>
-            </label>
+            <label>Preview</label>
+            <div id="label-preview" class="label-preview">
+              <div class="preview-loading">Loading preview...</div>
+            </div>
           </div>
-          
+
+          <div class="setting-group">
+            <label>Font Sizes</label>
+            <div class="font-size-controls">
+              <div class="font-size-row">
+                <label for="fnsku-font-size">FNSKU:</label>
+                <input type="number" id="fnsku-font-size" class="setting-input font-size-input" min="4" max="20"
+                  value="8">
+              </div>
+              <div class="font-size-row">
+                <label for="sku-font-size">SKU:</label>
+                <input type="number" id="sku-font-size" class="setting-input font-size-input" min="4" max="20"
+                  value="11">
+              </div>
+              <div class="font-size-row">
+                <label for="title-font-size">Title:</label>
+                <input type="number" id="title-font-size" class="setting-input font-size-input" min="4" max="20"
+                  value="6">
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <label>Content Options</label>
+            <div class="content-options">
+              <label class="checkbox-label">
+                <input type="checkbox" id="include-barcode" checked>
+                <span class="checkbox-text">Include barcode</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="include-fnsku" checked>
+                <span class="checkbox-text">Include FNSKU</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="include-sku" checked>
+                <span class="checkbox-text">Include SKU</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="include-title" checked>
+                <span class="checkbox-text">Include title</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="default-include-images">
+                <span class="checkbox-text">Include product images</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <label>Extension Options</label>
+            <div class="extension-options">
+              <label class="checkbox-label">
+                <input type="checkbox" id="auto-extract">
+                <span class="checkbox-text">Auto-extract on page load</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="auto-open-tabs">
+                <span class="checkbox-text">Auto-open tabs</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="debug-mode">
+                <span class="checkbox-text">Debug mode</span>
+              </label>
+            </div>
+          </div>
+
           <div class="settings-actions">
             <button id="reset-settings" class="secondary-btn">Reset</button>
             <button id="save-settings" class="primary-btn">Save</button>
@@ -129,6 +192,7 @@
 
   <script src="../lib/jspdf.umd.min.js"></script>
   <script src="../lib/jsbarcode.all.min.js"></script>
+  <script src="../content/pdf-generator.js"></script>
   <script src="popup.js"></script>
 </body>
 

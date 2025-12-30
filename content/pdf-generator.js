@@ -30,7 +30,7 @@ class PDFLabelGenerator {
           title: { x: 28.5, y: 26, fontSize: 6, align: 'center', maxLength: 50 }
         }
       },
-      
+
       thermal_57x32_minimal: {
         name: 'Thermal 57x32mm (Minimal)',
         width: 57,
@@ -103,7 +103,7 @@ class PDFLabelGenerator {
       if (i > 0) {
         doc.addPage();
       }
-      
+
       await this.renderLabel(doc, template, productData, barcodeDataURL, config);
     }
 
@@ -122,31 +122,44 @@ class PDFLabelGenerator {
     const elements = template.elements;
 
     // Render barcode
-    if (elements.barcode && barcodeDataURL) {
+    if (elements.barcode && barcodeDataURL && config.includeBarcode !== false) {
       doc.addImage(
-        barcodeDataURL, 
-        'PNG', 
-        elements.barcode.x, 
-        elements.barcode.y, 
-        elements.barcode.width, 
+        barcodeDataURL,
+        'PNG',
+        elements.barcode.x,
+        elements.barcode.y,
+        elements.barcode.width,
         elements.barcode.height
       );
     }
 
     // Render FNSKU
-    if (elements.fnsku) {
-      this.renderText(doc, productData.fnsku, elements.fnsku);
+    if (elements.fnsku && config.includeFnsku !== false) {
+      const fnskuElement = { ...elements.fnsku };
+      if (config.fontSize && config.fontSize.fnsku) {
+        fnskuElement.fontSize = config.fontSize.fnsku;
+      }
+      this.renderText(doc, productData.fnsku, fnskuElement);
     }
 
     // Render SKU
-    if (elements.sku && productData.sku) {
-      this.renderText(doc, productData.sku, elements.sku);
+    if (elements.sku && productData.sku && config.includeSku !== false) {
+      const skuElement = { ...elements.sku };
+      if (config.fontSize && config.fontSize.sku) {
+        skuElement.fontSize = config.fontSize.sku;
+      }
+      const skuText = `SKU: ${productData.sku}`;
+      this.renderText(doc, skuText, skuElement);
     }
 
     // Render title
-    if (elements.title && productData.title) {
-      const titleText = this.truncateText(productData.title, elements.title.maxLength || 50);
-      this.renderText(doc, titleText, elements.title);
+    if (elements.title && productData.title && config.includeTitle !== false) {
+      const titleElement = { ...elements.title };
+      if (config.fontSize && config.fontSize.title) {
+        titleElement.fontSize = config.fontSize.title;
+      }
+      const titleText = this.truncateText(productData.title, titleElement.maxLength || 50);
+      this.renderText(doc, titleText, titleElement);
     }
 
     // Render product image (if enabled and available)
@@ -181,7 +194,7 @@ class PDFLabelGenerator {
     // Auto-scale font if text is too long
     const textWidth = doc.getTextWidth(text);
     const maxWidth = element.maxWidth || 45; // Default max width
-    
+
     if (textWidth > maxWidth) {
       const scaleFactor = maxWidth / textWidth;
       doc.setFontSize(element.fontSize * scaleFactor);
@@ -201,7 +214,7 @@ class PDFLabelGenerator {
     return new Promise((resolve, reject) => {
       try {
         const canvas = document.createElement('canvas');
-        
+
         // Configure barcode options
         const options = {
           format: format,
@@ -215,7 +228,7 @@ class PDFLabelGenerator {
 
         // Generate barcode
         JsBarcode(canvas, data, options);
-        
+
         // Convert to data URL
         const dataURL = canvas.toDataURL('image/png');
         resolve(dataURL);
@@ -234,16 +247,16 @@ class PDFLabelGenerator {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      
+
       img.onload = () => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        
+
         canvas.width = img.width;
         canvas.height = img.height;
-        
+
         ctx.drawImage(img, 0, 0);
-        
+
         try {
           const dataURL = canvas.toDataURL('image/jpeg', 0.8);
           resolve(dataURL);
@@ -251,11 +264,11 @@ class PDFLabelGenerator {
           reject(new Error('Failed to convert image to data URL'));
         }
       };
-      
+
       img.onerror = () => {
         reject(new Error('Failed to load image'));
       };
-      
+
       img.src = imageUrl;
     });
   }
@@ -270,7 +283,7 @@ class PDFLabelGenerator {
     if (!text || text.length <= maxLength) {
       return text;
     }
-    
+
     return text.substring(0, maxLength - 3) + '...';
   }
 

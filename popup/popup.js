@@ -8,6 +8,7 @@ class PopupController {
     this.currentSettings = {};
     this.extensionStatus = {};
     this.downloadHistory = [];
+    this.pdfGenerator = null;
     this.init();
   }
 
@@ -16,6 +17,12 @@ class PopupController {
    */
   async init() {
     try {
+      // Wait for PDF generator to be available
+      await this.waitForPDFGenerator();
+
+      // Initialize PDF generator
+      this.pdfGenerator = new PDFLabelGenerator();
+
       // Load initial data
       await this.loadExtensionStatus();
       await this.loadCurrentSettings();
@@ -37,6 +44,30 @@ class PopupController {
       console.error('Failed to initialize popup:', error);
       this.showError('Failed to load extension data');
     }
+  }
+
+  /**
+   * Wait for PDF generator to be available
+   */
+  async waitForPDFGenerator() {
+    return new Promise((resolve, reject) => {
+      const checkGenerator = () => {
+        if (window.PDFLabelGenerator && window.jspdf && window.JsBarcode) {
+          resolve();
+        } else {
+          setTimeout(checkGenerator, 100);
+        }
+      };
+
+      checkGenerator();
+
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        if (!window.PDFLabelGenerator) {
+          reject(new Error('PDF generator failed to load'));
+        }
+      }, 10000);
+    });
   }
 
   /**
@@ -97,6 +128,49 @@ class PopupController {
     document.getElementById('reset-settings').addEventListener('click', () => {
       this.resetSettings();
     });
+
+    // Settings change listeners for preview update
+    document.getElementById('default-template').addEventListener('change', () => {
+      this.updateLabelPreview();
+    });
+
+    document.getElementById('default-barcode').addEventListener('change', () => {
+      this.updateLabelPreview();
+    });
+
+    // Font size change listeners
+    document.getElementById('fnsku-font-size').addEventListener('input', () => {
+      this.updateLabelPreview();
+    });
+
+    document.getElementById('sku-font-size').addEventListener('input', () => {
+      this.updateLabelPreview();
+    });
+
+    document.getElementById('title-font-size').addEventListener('input', () => {
+      this.updateLabelPreview();
+    });
+
+    // Content inclusion change listeners
+    document.getElementById('include-barcode').addEventListener('change', () => {
+      this.updateLabelPreview();
+    });
+
+    document.getElementById('include-fnsku').addEventListener('change', () => {
+      this.updateLabelPreview();
+    });
+
+    document.getElementById('include-sku').addEventListener('change', () => {
+      this.updateLabelPreview();
+    });
+
+    document.getElementById('include-title').addEventListener('change', () => {
+      this.updateLabelPreview();
+    });
+
+    document.getElementById('default-barcode').addEventListener('change', () => {
+      this.updateLabelPreview();
+    });
   }
 
   /**
@@ -151,6 +225,9 @@ class PopupController {
 
     // Update settings tooltip
     this.updateSettingsTooltip();
+
+    // Update label preview
+    this.updateLabelPreview();
   }
 
   /**
@@ -266,73 +343,45 @@ class PopupController {
   }
 
   /**
-   * Generate PDF directly in the popup
+   * Generate PDF using the proper PDF generator
    */
   async generatePDFDirectly(data) {
     try {
-      // Check if libraries are loaded
-      if (typeof window.jspdf === 'undefined' || typeof JsBarcode === 'undefined') {
-        throw new Error('PDF libraries not loaded');
+      if (!this.pdfGenerator) {
+        throw new Error('PDF generator not initialized');
       }
 
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: [57, 32]
-      });
-
-      // Generate barcode
-      const canvas = document.createElement('canvas');
-      JsBarcode(canvas, data.fnsku, {
-        format: 'CODE128',
-        displayValue: false,
-        margin: 0,
-        width: 2,
-        height: 40
-      });
-      const barcodeData = canvas.toDataURL('image/png');
-
-      // Generate labels
-      for (let i = 0; i < data.quantity; i++) {
-        if (i > 0) doc.addPage();
-
-        // Add barcode
-        doc.addImage(barcodeData, 'PNG', 4, 2, 49, 12);
-
-        // Add FNSKU text
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.text(data.fnsku, 28.5, 17, { align: 'center' });
-
-        // Add SKU text
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        const skuText = `SKU: ${data.sku}`;
-        if (skuText.length > 15) doc.setFontSize(9);
-        doc.text(skuText, 28.5, 22, { align: 'center' });
-
-        // Add title
-        doc.setFontSize(6);
-        doc.setFont('helvetica', 'normal');
-        const cleanTitle = data.title && data.title.length > 50 ?
-          data.title.substring(0, 50) + '...' : (data.title || '');
-        if (cleanTitle) {
-          doc.text(cleanTitle, 28.5, 26, { align: 'center' });
+      // Get current settings for PDF generation
+      const labelSettings = this.currentSettings.labelSettings || {};
+      const settings = {
+        template: labelSettings.template || 'thermal_57x32',
+        barcodeFormat: labelSettings.barcodeFormat || 'CODE128',
+        includeImage: labelSettings.includeImage || false,
+        includeBarcode: labelSettings.includeBarcode !== false,
+        includeFnsku: labelSettings.includeFnsku !== false,
+        includeSku: labelSettings.includeSku !== false,
+        includeTitle: labelSettings.includeTitle !== false,
+        fontSize: labelSettings.fontSize || {
+          fnsku: 8,
+          sku: 11,
+          title: 6
         }
-      }
+      };
 
-      // Create blob URL for the PDF
-      const pdfBlob = doc.output('blob');
-      const blobUrl = URL.createObjectURL(pdfBlob);
+      // Prepare product data in the format expected by PDFLabelGenerator
+      const productData = {
+        sku: data.sku,
+        fnsku: data.fnsku,
+        asin: data.asin,
+        title: data.title
+      };
+
+      // Generate PDF using the proper generator
+      const doc = await this.pdfGenerator.generateLabels(productData, data.quantity, settings);
 
       // Download the PDF
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = `${data.sku}_label.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const filename = `${data.sku}_label.pdf`;
+      this.pdfGenerator.savePDF(doc, filename);
 
       // Add to download history
       this.addToDownloadHistory({
@@ -527,6 +576,146 @@ class PopupController {
     if (autoExtractCheckbox) {
       autoExtractCheckbox.checked = labelSettings.autoExtract !== false;
     }
+
+    // Font size inputs
+    const fnskuFontSize = document.getElementById('fnsku-font-size');
+    const skuFontSize = document.getElementById('sku-font-size');
+    const titleFontSize = document.getElementById('title-font-size');
+
+    if (fnskuFontSize) fnskuFontSize.value = labelSettings.fontSize?.fnsku || 8;
+    if (skuFontSize) skuFontSize.value = labelSettings.fontSize?.sku || 11;
+    if (titleFontSize) titleFontSize.value = labelSettings.fontSize?.title || 6;
+
+    // Content inclusion options
+    const includeBarcodeCheckbox = document.getElementById('include-barcode');
+    const includeFnskuCheckbox = document.getElementById('include-fnsku');
+    const includeSkuCheckbox = document.getElementById('include-sku');
+    const includeTitleCheckbox = document.getElementById('include-title');
+
+    if (includeBarcodeCheckbox) includeBarcodeCheckbox.checked = labelSettings.includeBarcode !== false;
+    if (includeFnskuCheckbox) includeFnskuCheckbox.checked = labelSettings.includeFnsku !== false;
+    if (includeSkuCheckbox) includeSkuCheckbox.checked = labelSettings.includeSku !== false;
+    if (includeTitleCheckbox) includeTitleCheckbox.checked = labelSettings.includeTitle !== false;
+
+    // Update preview when settings change
+    this.updateLabelPreview();
+  }
+
+  /**
+   * Update label preview based on current settings
+   */
+  async updateLabelPreview() {
+    const previewContainer = document.getElementById('label-preview');
+    if (!previewContainer) return;
+
+    try {
+      previewContainer.innerHTML = '<div class="preview-loading">Generating preview...</div>';
+
+      if (!this.pdfGenerator) {
+        previewContainer.innerHTML = '<div class="preview-error">PDF generator not initialized</div>';
+        return;
+      }
+
+      // Get current settings
+      const labelSettings = this.currentSettings.labelSettings || {};
+      const template = document.getElementById('default-template')?.value || labelSettings.template || 'thermal_57x32';
+      const barcodeFormat = document.getElementById('default-barcode')?.value || labelSettings.barcodeFormat || 'CODE128';
+
+      // Sample data for preview
+      const sampleData = {
+        sku: 'SAMPLE-SKU',
+        fnsku: 'X002SAMPLE',
+        title: 'Sample Product Title for Preview'
+      };
+
+      // Get template info
+      const templateInfo = this.pdfGenerator.templates[template];
+      if (!templateInfo) {
+        previewContainer.innerHTML = '<div class="preview-error">Template not found</div>';
+        return;
+      }
+
+      // Generate barcode using the PDF generator's method
+      const barcodeDataURL = await this.pdfGenerator.generateBarcode(sampleData.fnsku, barcodeFormat);
+
+      // Create preview content
+      const previewContent = document.createElement('div');
+      previewContent.className = 'preview-content';
+
+      // Add template info
+      const templateInfo_div = document.createElement('div');
+      templateInfo_div.className = 'preview-template-info';
+      templateInfo_div.textContent = `${templateInfo.name} (${templateInfo.width}×${templateInfo.height}mm)`;
+      templateInfo_div.style.cssText = 'font-size: 11px; color: #666; margin-bottom: 8px; text-align: center;';
+
+      // Add barcode image
+      const barcodeImg = document.createElement('img');
+      barcodeImg.src = barcodeDataURL;
+      barcodeImg.className = 'preview-barcode';
+      barcodeImg.alt = 'Sample barcode';
+
+      // Get custom font sizes from settings
+      const customFontSizes = {
+        fnsku: parseInt(document.getElementById('fnsku-font-size')?.value) || labelSettings.fontSize?.fnsku || templateInfo.elements.fnsku?.fontSize || 8,
+        sku: parseInt(document.getElementById('sku-font-size')?.value) || labelSettings.fontSize?.sku || templateInfo.elements.sku?.fontSize || 11,
+        title: parseInt(document.getElementById('title-font-size')?.value) || labelSettings.fontSize?.title || templateInfo.elements.title?.fontSize || 6
+      };
+
+      // Get content inclusion settings
+      const includeBarcode = document.getElementById('include-barcode')?.checked !== false;
+      const includeFnsku = document.getElementById('include-fnsku')?.checked !== false;
+      const includeSku = document.getElementById('include-sku')?.checked !== false;
+      const includeTitle = document.getElementById('include-title')?.checked !== false;
+
+      // Add template info
+      previewContent.appendChild(templateInfo_div);
+
+      // Add barcode if enabled
+      if (includeBarcode && templateInfo.elements.barcode) {
+        previewContent.appendChild(barcodeImg);
+      }
+
+      // Add text elements based on template and settings
+      const textContainer = document.createElement('div');
+      textContainer.className = 'preview-text';
+
+      if (templateInfo.elements.fnsku && includeFnsku) {
+        const fnskuText = document.createElement('div');
+        fnskuText.className = 'preview-fnsku';
+        fnskuText.textContent = sampleData.fnsku;
+        fnskuText.style.fontSize = `${customFontSizes.fnsku}px`;
+        fnskuText.style.fontWeight = templateInfo.elements.fnsku.bold ? 'bold' : 'normal';
+        textContainer.appendChild(fnskuText);
+      }
+
+      if (templateInfo.elements.sku && includeSku) {
+        const skuText = document.createElement('div');
+        skuText.className = 'preview-sku';
+        skuText.textContent = `SKU: ${sampleData.sku}`;
+        skuText.style.fontSize = `${customFontSizes.sku}px`;
+        skuText.style.fontWeight = templateInfo.elements.sku.bold ? 'bold' : 'normal';
+        textContainer.appendChild(skuText);
+      }
+
+      if (templateInfo.elements.title && includeTitle) {
+        const titleText = document.createElement('div');
+        titleText.className = 'preview-title';
+        const maxLength = templateInfo.elements.title.maxLength || 50;
+        titleText.textContent = sampleData.title.length > maxLength ?
+          sampleData.title.substring(0, maxLength - 3) + '...' : sampleData.title;
+        titleText.style.fontSize = `${customFontSizes.title}px`;
+        textContainer.appendChild(titleText);
+      }
+
+      previewContent.appendChild(textContainer);
+
+      previewContainer.innerHTML = '';
+      previewContainer.appendChild(previewContent);
+
+    } catch (error) {
+      console.error('Preview generation error:', error);
+      previewContainer.innerHTML = '<div class="preview-error">Failed to generate preview</div>';
+    }
   }
 
   /**
@@ -540,20 +729,26 @@ class PopupController {
 
       // Collect settings from form
       const newSettings = {
-        fnskuLabelSettings: {
+        labelSettings: {
           template: document.getElementById('default-template').value,
           barcodeFormat: document.getElementById('default-barcode').value,
           includeImage: document.getElementById('default-include-images').checked,
+          includeBarcode: document.getElementById('include-barcode').checked,
+          includeFnsku: document.getElementById('include-fnsku').checked,
+          includeSku: document.getElementById('include-sku').checked,
+          includeTitle: document.getElementById('include-title').checked,
           autoOpenTabs: document.getElementById('auto-open-tabs').checked,
           debugMode: document.getElementById('debug-mode').checked,
           autoExtract: document.getElementById('auto-extract').checked,
-          fontSize: this.currentSettings.labelSettings?.fontSize || {
-            fnsku: 8,
-            sku: 11,
-            title: 6
+          fontSize: {
+            fnsku: parseInt(document.getElementById('fnsku-font-size').value) || 8,
+            sku: parseInt(document.getElementById('sku-font-size').value) || 11,
+            title: parseInt(document.getElementById('title-font-size').value) || 6
           }
         }
       };
+
+      console.log('Saving settings:', newSettings);
 
       // Save to background script
       const response = await chrome.runtime.sendMessage({
@@ -561,21 +756,24 @@ class PopupController {
         settings: newSettings
       });
 
+      console.log('Save response:', response);
+
       if (response.success) {
-        this.currentSettings.labelSettings = newSettings.fnskuLabelSettings;
+        this.currentSettings.labelSettings = newSettings.labelSettings;
         this.updateUI();
-        this.closeSettings();
         this.showSuccess('Settings saved successfully');
       } else {
-        this.showError('Failed to save settings');
+        this.showError('Failed to save settings: ' + (response.error || 'Unknown error'));
       }
     } catch (error) {
       console.error('Failed to save settings:', error);
-      this.showError('Failed to save settings');
+      this.showError('Failed to save settings: ' + error.message);
     } finally {
       const saveButton = document.getElementById('save-settings');
-      saveButton.disabled = false;
-      saveButton.textContent = 'Save Settings';
+      if (saveButton) {
+        saveButton.disabled = false;
+        saveButton.textContent = 'Save Settings';
+      }
     }
   }
 
@@ -589,10 +787,14 @@ class PopupController {
 
     try {
       const defaultSettings = {
-        fnskuLabelSettings: {
+        labelSettings: {
           template: 'thermal_57x32',
           barcodeFormat: 'CODE128',
           includeImage: false,
+          includeBarcode: true,
+          includeFnsku: true,
+          includeSku: true,
+          includeTitle: true,
           autoOpenTabs: false,
           debugMode: false,
           autoExtract: true,
@@ -610,7 +812,7 @@ class PopupController {
       });
 
       if (response.success) {
-        this.currentSettings.labelSettings = defaultSettings.fnskuLabelSettings;
+        this.currentSettings.labelSettings = defaultSettings.labelSettings;
         this.populateSettingsPanel();
         this.updateUI();
         this.showSuccess('Settings reset to defaults');
@@ -822,7 +1024,7 @@ class PopupController {
         const date = new Date(item.timestamp);
         const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const dateStr = date.toLocaleDateString();
-        
+
         return `
           <div class="download-item available" data-index="${index}" title="Click to regenerate and download">
             <div class="download-icon">📄</div>
@@ -842,14 +1044,14 @@ class PopupController {
       downloadsList.querySelectorAll('.download-item').forEach(item => {
         const index = parseInt(item.dataset.index);
         const historyItem = this.downloadHistory[index];
-        
+
         // Click to regenerate and download
         item.addEventListener('click', (e) => {
           if (!e.target.classList.contains('remove-btn')) {
             this.regenerateAndDownload(historyItem);
           }
         });
-        
+
         // Remove button
         const removeBtn = item.querySelector('.remove-btn');
         if (removeBtn) {
@@ -871,7 +1073,7 @@ class PopupController {
   async regenerateAndDownload(item) {
     try {
       this.showSuccess('Regenerating label...');
-      
+
       // Populate the manual form with the stored data
       document.getElementById('manual-sku').value = item.sku || '';
       document.getElementById('manual-fnsku').value = item.fnsku || '';

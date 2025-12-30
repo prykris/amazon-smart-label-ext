@@ -10,7 +10,7 @@ class UIController {
     this.activeModifiers = new Set();
     this.configDialog = null;
     this.settings = {};
-    
+
     this.initializeEventListeners();
     this.loadSettings();
   }
@@ -46,13 +46,13 @@ class UIController {
   createSmartButton(rowElement) {
     const container = document.createElement('div');
     container.className = 'smart-label-container';
-    
+
     // Create button
     const button = document.createElement('button');
     button.className = 'smart-print-btn';
     button.innerHTML = '🖨️';
     button.title = 'Print FNSKU Label';
-    
+
     // Create quantity input
     const quantityInput = document.createElement('input');
     quantityInput.type = 'number';
@@ -61,7 +61,7 @@ class UIController {
     quantityInput.value = '1';
     quantityInput.className = 'quantity-input';
     quantityInput.title = 'Number of labels';
-    
+
     // Prevent event bubbling on quantity input
     quantityInput.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -83,7 +83,7 @@ class UIController {
     // Assemble container
     container.appendChild(button);
     container.appendChild(quantityInput);
-    
+
     return container;
   }
 
@@ -94,11 +94,11 @@ class UIController {
    */
   async handleButtonClick(rowElement, quantity) {
     const qty = parseInt(quantity) || 1;
-    
+
     try {
       // Show loading state
       this.setButtonLoading(rowElement, true);
-      
+
       if (this.activeModifiers.has('shift')) {
         // Shift + Click: Open configuration dialog
         this.openConfigurationDialog(rowElement);
@@ -106,14 +106,14 @@ class UIController {
         // Extract product data
         const productData = this.dataExtractor.extractProductData(rowElement);
         const validation = this.dataExtractor.validateData(productData);
-        
+
         if (!validation.isValid) {
           throw new Error(validation.errors.join(', '));
         }
-        
+
         // Generate PDF
         const doc = await this.pdfGenerator.generateLabels(productData, qty, this.settings);
-        
+
         if (this.activeModifiers.has('ctrl')) {
           // Ctrl + Click: Open in new tab
           this.pdfGenerator.openPDFInNewTab(doc);
@@ -147,14 +147,14 @@ class UIController {
    */
   updateButtonStates() {
     const buttons = document.querySelectorAll('.smart-print-btn');
-    
+
     buttons.forEach(button => {
       // Remove all modifier classes
       button.classList.remove('ctrl-held', 'shift-held');
-      
+
       // Update tooltip
       let tooltip = 'Print FNSKU Label';
-      
+
       if (this.activeModifiers.has('shift')) {
         button.classList.add('shift-held');
         tooltip = 'Open Label Settings';
@@ -162,7 +162,7 @@ class UIController {
         button.classList.add('ctrl-held');
         tooltip = 'Print to New Tab';
       }
-      
+
       // Add quantity info to tooltip
       const container = button.closest('.smart-label-container');
       if (container) {
@@ -171,7 +171,7 @@ class UIController {
           tooltip += ` (Qty: ${quantityInput.value})`;
         }
       }
-      
+
       button.title = tooltip;
     });
   }
@@ -207,7 +207,7 @@ class UIController {
 
     this.configDialog = this.createConfigurationDialog(rowElement);
     document.body.appendChild(this.configDialog);
-    
+
     // Focus first input
     const firstInput = this.configDialog.querySelector('input, select');
     if (firstInput) {
@@ -223,7 +223,7 @@ class UIController {
   createConfigurationDialog(rowElement) {
     const dialog = document.createElement('div');
     dialog.className = 'fnsku-config-dialog';
-    
+
     dialog.innerHTML = `
       <div class="dialog-overlay"></div>
       <div class="dialog-content">
@@ -271,6 +271,18 @@ class UIController {
                 <input type="checkbox" id="include-image" class="config-checkbox">
                 Include product image
               </label>
+              <label>
+                <input type="checkbox" id="auto-extract" class="config-checkbox">
+                Auto-extract on page load
+              </label>
+              <label>
+                <input type="checkbox" id="auto-open-tabs" class="config-checkbox">
+                Auto-open tabs
+              </label>
+              <label>
+                <input type="checkbox" id="debug-mode" class="config-checkbox">
+                Debug mode
+              </label>
             </div>
           </div>
           
@@ -300,10 +312,10 @@ class UIController {
 
     // Load current settings
     this.populateConfigDialog(dialog);
-    
+
     // Event listeners
     this.setupConfigDialogEvents(dialog, rowElement);
-    
+
     return dialog;
   }
 
@@ -330,6 +342,15 @@ class UIController {
     if (fnskuFontSize) fnskuFontSize.value = this.settings.fontSize?.fnsku || 8;
     if (skuFontSize) skuFontSize.value = this.settings.fontSize?.sku || 11;
     if (titleFontSize) titleFontSize.value = this.settings.fontSize?.title || 6;
+
+    // Set additional checkbox values
+    const autoExtractCheckbox = dialog.querySelector('#auto-extract');
+    const autoOpenTabsCheckbox = dialog.querySelector('#auto-open-tabs');
+    const debugModeCheckbox = dialog.querySelector('#debug-mode');
+
+    if (autoExtractCheckbox) autoExtractCheckbox.checked = this.settings.autoExtract !== false;
+    if (autoOpenTabsCheckbox) autoOpenTabsCheckbox.checked = this.settings.autoOpenTabs || false;
+    if (debugModeCheckbox) debugModeCheckbox.checked = this.settings.debugMode || false;
 
     // Show/hide custom size section
     this.toggleCustomSizeSection(dialog, templateSelect.value === 'custom');
@@ -371,12 +392,12 @@ class UIController {
     savePrintBtn.addEventListener('click', async () => {
       this.saveConfigurationSettings(dialog);
       this.closeConfigurationDialog();
-      
+
       if (rowElement) {
         // Get quantity from the row's input
         const quantityInput = rowElement.querySelector('.quantity-input');
         const quantity = quantityInput ? quantityInput.value : '1';
-        
+
         // Trigger print with new settings
         setTimeout(() => {
           this.handleButtonClick(rowElement, quantity);
@@ -415,6 +436,9 @@ class UIController {
       customHeight: parseInt(dialog.querySelector('#custom-height').value),
       barcodeFormat: dialog.querySelector('#barcode-format').value,
       includeImage: dialog.querySelector('#include-image').checked,
+      autoExtract: dialog.querySelector('#auto-extract').checked,
+      autoOpenTabs: dialog.querySelector('#auto-open-tabs').checked,
+      debugMode: dialog.querySelector('#debug-mode').checked,
       fontSize: {
         fnsku: parseInt(dialog.querySelector('#fnsku-font-size').value),
         sku: parseInt(dialog.querySelector('#sku-font-size').value),
@@ -456,9 +480,9 @@ class UIController {
     const notification = document.createElement('div');
     notification.className = `fnsku-notification ${type}`;
     notification.textContent = message;
-    
+
     document.body.appendChild(notification);
-    
+
     // Auto-remove after delay
     const delay = type === 'error' ? 7000 : type === 'warning' ? 5000 : 3000;
     setTimeout(() => {
@@ -473,8 +497,12 @@ class UIController {
    */
   async loadSettings() {
     try {
-      const result = await chrome.storage.sync.get(['fnskuLabelSettings']);
-      this.settings = result.fnskuLabelSettings || {};
+      const response = await chrome.runtime.sendMessage({ action: 'getSettings' });
+      if (response.success) {
+        this.settings = response.data.labelSettings || {};
+      } else {
+        this.settings = {};
+      }
     } catch (error) {
       console.warn('Failed to load settings:', error);
       this.settings = {};
@@ -486,7 +514,13 @@ class UIController {
    */
   async saveSettings() {
     try {
-      await chrome.storage.sync.set({ fnskuLabelSettings: this.settings });
+      const response = await chrome.runtime.sendMessage({
+        action: 'saveSettings',
+        settings: { labelSettings: this.settings }
+      });
+      if (!response.success) {
+        throw new Error('Failed to save settings');
+      }
     } catch (error) {
       console.warn('Failed to save settings:', error);
     }

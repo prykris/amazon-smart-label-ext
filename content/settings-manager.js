@@ -13,6 +13,7 @@ class SettingsManager {
         autoOpenTabs: false,
         debugMode: false,
         lastSelectedTab: 'downloads',
+        pdfDPI: 300, // PDF rendering DPI (150, 300, 600)
         conditionSettings: {
           enabled: true,
           text: 'NEW',
@@ -143,6 +144,7 @@ class SettingsManager {
         autoExtract: true,
         autoOpenTabs: false,
         debugMode: false,
+        pdfDPI: 300,
         conditionSettings: {
           enabled: true,
           text: 'NEW',

@@ -80,6 +80,15 @@ class PDFLabelGenerator {
       throw new Error('FNSKU is required for label generation');
     }
 
+    // Merge global condition settings with template condition settings
+    const globalConditionSettings = globalSettings.conditionSettings || {};
+    const templateConditionSettings = template.conditionSettings || {};
+    const mergedConditionSettings = {
+      enabled: globalConditionSettings.enabled !== undefined ? globalConditionSettings.enabled : templateConditionSettings.enabled !== false,
+      text: globalConditionSettings.text || templateConditionSettings.text || 'NEW',
+      position: globalConditionSettings.position || templateConditionSettings.position || 'bottom-left'
+    };
+
     // Build config from settings and template
     const config = {
       ...this.defaultSettings,
@@ -89,27 +98,40 @@ class PDFLabelGenerator {
         fnsku: true,
         sku: true,
         title: true,
-        images: false
+        images: false,
+        condition: true
       },
       // Apply font size overrides from global settings
       fontSize: {
         fnsku: globalSettings.fontSizeOverrides?.fnsku || template.elements?.fnsku?.fontSize || 8,
         sku: globalSettings.fontSizeOverrides?.sku || template.elements?.sku?.fontSize || 11,
-        title: globalSettings.fontSizeOverrides?.title || template.elements?.title?.fontSize || 6
+        title: globalSettings.fontSizeOverrides?.title || template.elements?.title?.fontSize || 6,
+        condition: globalSettings.fontSizeOverrides?.condition || template.elements?.condition?.fontSize || 5
       },
+      conditionSettings: mergedConditionSettings,
       ...settings // Allow settings override for specific cases
     };
 
-    // Initialize jsPDF
+    // Initialize jsPDF with DPI setting
     const { jsPDF } = window.jspdf;
+    const pdfDPI = globalSettings.pdfDPI || 300;
     const doc = new jsPDF({
       orientation: template.orientation,
       unit: 'mm',
-      format: [template.width, template.height]
+      format: [template.width, template.height],
+      putOnlyUsedFonts: true,
+      compress: true
     });
 
-    // Generate barcode
-    const barcodeDataURL = await this.generateBarcode(productData.fnsku, config.barcodeFormat);
+    // Set PDF properties for better quality
+    doc.setProperties({
+      title: `FNSKU Label - ${productData.sku || productData.fnsku}`,
+      creator: 'Amazon FNSKU Extension',
+      producer: 'Amazon FNSKU Extension'
+    });
+
+    // Generate barcode with DPI setting
+    const barcodeDataURL = await this.generateBarcode(productData.fnsku, config.barcodeFormat, pdfDPI);
 
     // Generate labels
     for (let i = 0; i < quantity; i++) {
@@ -146,7 +168,7 @@ class PDFLabelGenerator {
   async renderLabel(doc, template, productData, barcodeDataURL, config) {
     const elements = template.elements;
     const contentInclusion = config.contentInclusion || template.contentInclusion || {};
-    const conditionSettings = template.conditionSettings || {};
+    const conditionSettings = config.conditionSettings || template.conditionSettings || {};
 
     // Render barcode
     if (elements.barcode && barcodeDataURL && contentInclusion.barcode !== false) {

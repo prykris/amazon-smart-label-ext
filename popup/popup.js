@@ -13,6 +13,7 @@ class PopupController {
     this.dimensionChangeTimeout = null;
     this.nameChangeTimeout = null;
     this.fontSizeChangeTimeout = null;
+    this.conditionSettingsChangeTimeout = null;
 
     this.init();
   }
@@ -80,8 +81,12 @@ class PopupController {
     const conditionTextInput = document.getElementById('condition-text');
     const conditionPositionSelect = document.getElementById('condition-position');
 
-    if (conditionTextInput) conditionTextInput.addEventListener('input', () => this.autoSaveSettings());
-    if (conditionPositionSelect) conditionPositionSelect.addEventListener('change', () => this.autoSaveSettings());
+    if (conditionTextInput) conditionTextInput.addEventListener('input', () => this.onConditionSettingsChange());
+    if (conditionPositionSelect) conditionPositionSelect.addEventListener('change', () => this.onConditionSettingsChange());
+
+    // DPI setting - immediate preview update
+    const pdfDpiSelect = document.getElementById('pdf-dpi');
+    if (pdfDpiSelect) pdfDpiSelect.addEventListener('change', () => this.autoSaveSettings());
 
     // Hybrid template selector event handlers
     this.setupHybridTemplateSelector();
@@ -510,6 +515,12 @@ class PopupController {
         barcodeSelect.value = globalSettings.barcodeFormat || 'CODE128';
       }
 
+      // PDF DPI setting
+      const pdfDpiSelect = document.getElementById('pdf-dpi');
+      if (pdfDpiSelect) {
+        pdfDpiSelect.value = globalSettings.pdfDPI || 300;
+      }
+
       // App behavior checkboxes
       const autoExtractCheckbox = document.getElementById('auto-extract');
       const autoOpenTabsCheckbox = document.getElementById('auto-open-tabs');
@@ -910,6 +921,31 @@ class PopupController {
   }
 
   /**
+   * Handle condition settings changes with debounced save and preview update
+   */
+  onConditionSettingsChange() {
+    // Clear existing timeout
+    if (this.conditionSettingsChangeTimeout) {
+      clearTimeout(this.conditionSettingsChangeTimeout);
+    }
+
+    // Set new timeout for debounced save and preview update
+    this.conditionSettingsChangeTimeout = setTimeout(async () => {
+      try {
+        // Auto-save the settings
+        await this.autoSaveSettings();
+
+        // Update the preview immediately to show condition changes
+        await this.updatePreview();
+
+        console.log('Condition settings changes applied');
+      } catch (error) {
+        console.error('Failed to handle condition settings change:', error);
+      }
+    }, 300);
+  }
+
+  /**
    * Update template name display with dimensions
    */
   async updateTemplateNameDisplay() {
@@ -1029,6 +1065,7 @@ class PopupController {
       // Get form values
       const templateId = document.getElementById('template-select')?.value || 'thermal_57x32';
       const barcodeFormat = document.getElementById('default-barcode')?.value || 'CODE128';
+      const pdfDPI = parseInt(document.getElementById('pdf-dpi')?.value) || 300;
       const autoExtract = document.getElementById('auto-extract')?.checked !== false;
       const autoOpenTabs = document.getElementById('auto-open-tabs')?.checked || false;
       const debugMode = document.getElementById('debug-mode')?.checked || false;
@@ -1047,6 +1084,7 @@ class PopupController {
       await this.settingsManager.setSelectedTemplateId(templateId);
       await this.settingsManager.updateGlobalSettings({
         barcodeFormat,
+        pdfDPI,
         autoExtract,
         autoOpenTabs,
         debugMode,
@@ -1147,7 +1185,7 @@ class PopupController {
     if (!previewContainer) return;
 
     try {
-      previewContainer.innerHTML = '<div class="preview-loading">Generating preview...</div>';
+      previewContainer.innerHTML = '<div class="preview-loading">Generating accurate preview...</div>';
 
       if (!this.pdfGenerator) {
         previewContainer.innerHTML = '<div class="preview-error">PDF generator not initialized</div>';
@@ -1157,7 +1195,6 @@ class PopupController {
       // Get selected template ID
       const templateSelect = document.getElementById('template-select');
       const templateId = templateSelect?.value || await this.settingsManager.getSelectedTemplateId() || 'thermal_57x32';
-      const barcodeFormat = document.getElementById('default-barcode')?.value || 'CODE128';
 
       // Get persistent sample data
       const sampleData = await this.getSampleData();
@@ -1169,8 +1206,12 @@ class PopupController {
         return;
       }
 
-      // Generate barcode using the PDF generator's method
-      const barcodeDataURL = await this.pdfGenerator.generateBarcode(sampleData.fnsku, barcodeFormat);
+      // Generate actual PDF using the real PDF generator (this will include condition element)
+      const pdfDoc = await this.pdfGenerator.generateLabels(sampleData, 1, { templateId });
+
+      // Convert PDF to image for preview
+      const pdfBlob = pdfDoc.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
 
       // Create preview wrapper with controls
       const previewWrapper = document.createElement('div');
@@ -1185,14 +1226,14 @@ class PopupController {
       // Edit button (left)
       const editBtn = document.createElement('button');
       editBtn.className = 'preview-edit-btn';
-      editBtn.textContent = 'Edit';
+      editBtn.textContent = 'Edit Sample Data';
       editBtn.style.cssText = 'padding: 4px 8px; font-size: 11px; border: 1px solid #007bff; background: white; color: #007bff; border-radius: 3px; cursor: pointer;';
       editBtn.addEventListener('click', () => this.openSampleDataEditor());
 
       // Download button (right)
       const downloadBtn = document.createElement('button');
       downloadBtn.className = 'preview-download-btn';
-      downloadBtn.textContent = 'Download';
+      downloadBtn.textContent = 'Download PDF';
       downloadBtn.style.cssText = 'padding: 4px 8px; font-size: 11px; border: 1px solid #28a745; background: #28a745; color: white; border-radius: 3px; cursor: pointer;';
       downloadBtn.addEventListener('click', () => this.downloadFromPreview());
 
@@ -1202,6 +1243,7 @@ class PopupController {
       // Create preview content
       const previewContent = document.createElement('div');
       previewContent.className = 'preview-content';
+      previewContent.style.cssText = 'text-align: center;';
 
       // Add template info
       const templateInfoDiv = document.createElement('div');
@@ -1212,58 +1254,38 @@ class PopupController {
       templateInfoDiv.textContent = `${templateInfo.name} (${width}×${height}${units})`;
       templateInfoDiv.style.cssText = 'font-size: 11px; color: #666; margin-bottom: 8px; text-align: center;';
 
-      // Add barcode image
-      const barcodeImg = document.createElement('img');
-      barcodeImg.src = barcodeDataURL;
-      barcodeImg.className = 'preview-barcode';
-      barcodeImg.alt = 'Sample barcode';
+      // Create PDF embed for accurate preview
+      const pdfEmbed = document.createElement('embed');
+      pdfEmbed.src = pdfUrl;
+      pdfEmbed.type = 'application/pdf';
+      pdfEmbed.style.cssText = `
+        width: 100%;
+        height: 250px;
+        border: none;
+        background: white;
+      `;
 
-      // Add template info
+      // Fallback: Create iframe if embed doesn't work
+      const pdfIframe = document.createElement('iframe');
+      pdfIframe.src = pdfUrl;
+      pdfIframe.style.cssText = `
+        width: 100%;
+        height: 250px;
+        border: none;
+        background: white;
+        display: none;
+      `;
+
+      // Show iframe if embed fails
+      pdfEmbed.onerror = () => {
+        pdfEmbed.style.display = 'none';
+        pdfIframe.style.display = 'block';
+      };
+
+      // Add elements to preview content
       previewContent.appendChild(templateInfoDiv);
-
-      // Add barcode if enabled
-      if (templateInfo.contentInclusion?.barcode !== false) {
-        previewContent.appendChild(barcodeImg);
-      }
-
-      // Add text elements based on template
-      const textContainer = document.createElement('div');
-      textContainer.className = 'preview-text';
-
-      // Get current font size overrides from form inputs (live values)
-      const currentFnskuFontSize = parseInt(document.getElementById('fnsku-font-size')?.value) || templateInfo.elements?.fnsku?.fontSize || 8;
-      const currentSkuFontSize = parseInt(document.getElementById('sku-font-size')?.value) || templateInfo.elements?.sku?.fontSize || 11;
-      const currentTitleFontSize = parseInt(document.getElementById('title-font-size')?.value) || templateInfo.elements?.title?.fontSize || 6;
-
-      // FNSKU text
-      if (templateInfo.contentInclusion?.fnsku !== false) {
-        const fnskuText = document.createElement('div');
-        fnskuText.className = 'preview-fnsku';
-        fnskuText.textContent = sampleData.fnsku;
-        fnskuText.style.fontSize = `${currentFnskuFontSize}px`;
-        textContainer.appendChild(fnskuText);
-      }
-
-      // SKU text
-      if (templateInfo.contentInclusion?.sku !== false) {
-        const skuText = document.createElement('div');
-        skuText.className = 'preview-sku';
-        skuText.textContent = `SKU: ${sampleData.sku}`;
-        skuText.style.fontSize = `${currentSkuFontSize}px`;
-        textContainer.appendChild(skuText);
-      }
-
-      // Title text
-      if (templateInfo.contentInclusion?.title !== false) {
-        const titleText = document.createElement('div');
-        titleText.className = 'preview-title';
-        titleText.textContent = sampleData.title.length > 50 ?
-          sampleData.title.substring(0, 47) + '...' : sampleData.title;
-        titleText.style.fontSize = `${currentTitleFontSize}px`;
-        textContainer.appendChild(titleText);
-      }
-
-      previewContent.appendChild(textContainer);
+      previewContent.appendChild(pdfEmbed);
+      previewContent.appendChild(pdfIframe);
 
       // Add quantity controls at bottom
       const controlsBottom = document.createElement('div');
@@ -1293,9 +1315,14 @@ class PopupController {
       previewContainer.innerHTML = '';
       previewContainer.appendChild(previewWrapper);
 
+      // Clean up the blob URL after a delay to allow rendering
+      setTimeout(() => {
+        URL.revokeObjectURL(pdfUrl);
+      }, 5000);
+
     } catch (error) {
       console.error('Preview generation error:', error);
-      previewContainer.innerHTML = '<div class="preview-error">Failed to generate preview</div>';
+      previewContainer.innerHTML = '<div class="preview-error">Failed to generate preview: ' + error.message + '</div>';
     }
   }
 
@@ -1309,7 +1336,8 @@ class PopupController {
         sku: 'SAMPLE-SKU',
         fnsku: 'X002SAMPLE',
         asin: 'B0SAMPLE1',
-        title: 'Sample Product Title for Preview'
+        title: 'Sample Product Title for Preview',
+        condition: 'NEW'
       };
     } catch (error) {
       console.error('Failed to get sample data:', error);
@@ -1317,7 +1345,8 @@ class PopupController {
         sku: 'SAMPLE-SKU',
         fnsku: 'X002SAMPLE',
         asin: 'B0SAMPLE1',
-        title: 'Sample Product Title for Preview'
+        title: 'Sample Product Title for Preview',
+        condition: 'NEW'
       };
     }
   }
@@ -1379,6 +1408,10 @@ class PopupController {
           <label style="display: block; margin-bottom: 4px; font-size: 12px; font-weight: 500;">ASIN</label>
           <input type="text" id="sample-asin" value="${currentData.asin}" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;" pattern="^B[0-9A-Z]{9}$">
         </div>
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; margin-bottom: 4px; font-size: 12px; font-weight: 500;">Condition</label>
+          <input type="text" id="sample-condition" value="${currentData.condition || 'NEW'}" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;" maxlength="10" placeholder="NEW, USED, REFURBISHED">
+        </div>
         <div style="margin-bottom: 16px;">
           <label style="display: block; margin-bottom: 4px; font-size: 12px; font-weight: 500;">Product Title</label>
           <input type="text" id="sample-title" value="${currentData.title}" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
@@ -1402,6 +1435,7 @@ class PopupController {
           sku: document.getElementById('sample-sku').value.trim(),
           fnsku: document.getElementById('sample-fnsku').value.trim().toUpperCase(),
           asin: document.getElementById('sample-asin').value.trim().toUpperCase(),
+          condition: document.getElementById('sample-condition').value.trim() || 'NEW',
           title: document.getElementById('sample-title').value.trim()
         };
 

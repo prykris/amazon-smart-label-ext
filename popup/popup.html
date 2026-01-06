@@ -86,6 +86,12 @@
               <input type="text" id="manual-title" class="form-input" placeholder="Optional: Product title">
             </div>
 
+            <div class="form-group">
+              <label for="manual-condition">Condition</label>
+              <input type="text" id="manual-condition" class="form-input" placeholder="NEW" value="NEW" maxlength="10">
+              <div class="form-hint">Amazon compliance condition (e.g., NEW, USED, REFURBISHED)</div>
+            </div>
+
             <div class="form-actions">
               <button type="button" id="load-sample" class="secondary-btn">Sample</button>
               <button type="button" id="clear-form" class="secondary-btn">Clear</button>
@@ -201,6 +207,28 @@
                   <input type="checkbox" id="default-include-images">
                   <span class="checkbox-text">Images</span>
                 </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="include-condition" checked>
+                  <span class="checkbox-text">Condition</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <label>Amazon Condition</label>
+              <div class="condition-settings">
+                <div class="condition-row">
+                  <label for="condition-text">Text:</label>
+                  <input type="text" id="condition-text" class="setting-input condition-input" value="NEW" maxlength="10">
+                </div>
+                <div class="condition-row">
+                  <label for="condition-position">Position:</label>
+                  <select id="condition-position" class="setting-input condition-input">
+                    <option value="bottom-left">Bottom Left</option>
+                    <option value="bottom-right">Bottom Right</option>
+                    <option value="title-prefix">Title Prefix</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>

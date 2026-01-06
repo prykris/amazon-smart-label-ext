@@ -4,8 +4,9 @@
  */
 
 class PDFLabelGenerator {
-  constructor(templateManager = null) {
+  constructor(templateManager = null, settingsManager = null) {
     this.templateManager = templateManager;
+    this.settingsManager = settingsManager;
     this.defaultSettings = {
       barcodeFormat: 'CODE128',
       includeImage: false,
@@ -22,6 +23,14 @@ class PDFLabelGenerator {
   }
 
   /**
+   * Set settings manager instance
+   * @param {SettingsManager} settingsManager - Settings manager instance
+   */
+  setSettingsManager(settingsManager) {
+    this.settingsManager = settingsManager;
+  }
+
+  /**
    * Ensure template manager is available
    */
   async ensureTemplateManager() {
@@ -29,6 +38,17 @@ class PDFLabelGenerator {
       // Create a new instance if not provided
       this.templateManager = new TemplateManager();
       await this.templateManager.init();
+    }
+  }
+
+  /**
+   * Ensure settings manager is available
+   */
+  async ensureSettingsManager() {
+    if (!this.settingsManager) {
+      // Create a new instance if not provided
+      this.settingsManager = new SettingsManager();
+      await this.settingsManager.init();
     }
   }
 
@@ -41,29 +61,44 @@ class PDFLabelGenerator {
    */
   async generateLabels(productData, quantity = 1, settings = {}) {
     await this.ensureTemplateManager();
+    await this.ensureSettingsManager();
     
-    const config = { ...this.defaultSettings, ...settings };
+    // Get current settings from SettingsManager (single source of truth)
+    const currentSettings = await this.settingsManager.getSettings();
+    const globalSettings = currentSettings.globalSettings || {};
     
-    // Get template from template manager
-    let template;
-    if (settings.templateId) {
-      template = await this.templateManager.getTemplate(settings.templateId);
-    } else if (settings.template) {
-      // Support legacy template object
-      template = settings.template;
-    } else {
-      // Use default template
-      template = await this.templateManager.getTemplate('thermal_57x32');
-    }
+    // Get active template from SettingsManager
+    const templateId = settings.templateId || currentSettings.selectedTemplateId || 'thermal_57x32';
+    const template = await this.templateManager.getTemplate(templateId);
 
     if (!template) {
-      throw new Error('Template not found');
+      throw new Error(`Template not found: ${templateId}`);
     }
 
     // Validate required data
     if (!productData.fnsku) {
       throw new Error('FNSKU is required for label generation');
     }
+
+    // Build config from settings and template
+    const config = {
+      ...this.defaultSettings,
+      barcodeFormat: globalSettings.barcodeFormat || 'CODE128',
+      contentInclusion: template.contentInclusion || {
+        barcode: true,
+        fnsku: true,
+        sku: true,
+        title: true,
+        images: false
+      },
+      // Apply font size overrides from global settings
+      fontSize: {
+        fnsku: globalSettings.fontSizeOverrides?.fnsku || template.elements?.fnsku?.fontSize || 8,
+        sku: globalSettings.fontSizeOverrides?.sku || template.elements?.sku?.fontSize || 11,
+        title: globalSettings.fontSizeOverrides?.title || template.elements?.title?.fontSize || 6
+      },
+      ...settings // Allow settings override for specific cases
+    };
 
     // Initialize jsPDF
     const { jsPDF } = window.jspdf;
@@ -111,6 +146,7 @@ class PDFLabelGenerator {
   async renderLabel(doc, template, productData, barcodeDataURL, config) {
     const elements = template.elements;
     const contentInclusion = config.contentInclusion || template.contentInclusion || {};
+    const conditionSettings = template.conditionSettings || {};
 
     // Render barcode
     if (elements.barcode && barcodeDataURL && contentInclusion.barcode !== false) {
@@ -143,14 +179,44 @@ class PDFLabelGenerator {
       this.renderText(doc, skuText, skuElement);
     }
 
-    // Render title
+    // Render title (with condition prefix if configured)
     if (elements.title && productData.title && contentInclusion.title !== false) {
       const titleElement = { ...elements.title };
       if (config.fontSize && config.fontSize.title) {
         titleElement.fontSize = config.fontSize.title;
       }
-      const titleText = this.truncateText(productData.title, titleElement.maxLength || 50);
+      
+      let titleText = productData.title;
+      
+      // Apply condition prefix if configured
+      if (conditionSettings.enabled !== false && conditionSettings.position === 'title-prefix' && contentInclusion.condition !== false) {
+        const conditionText = productData.condition || conditionSettings.text || 'NEW';
+        titleText = `${conditionText} - ${titleText}`;
+      }
+      
+      titleText = this.truncateText(titleText, titleElement.maxLength || 50);
       this.renderText(doc, titleText, titleElement);
+    }
+
+    // Render condition element (if not using title prefix)
+    if (elements.condition && contentInclusion.condition !== false && conditionSettings.enabled !== false) {
+      if (!conditionSettings.position || conditionSettings.position !== 'title-prefix') {
+        const conditionElement = { ...elements.condition };
+        if (config.fontSize && config.fontSize.condition) {
+          conditionElement.fontSize = config.fontSize.condition;
+        }
+        
+        // Get condition text from product data or settings
+        const conditionText = productData.condition || conditionSettings.text || 'NEW';
+        
+        // Adjust position based on settings
+        if (conditionSettings.position === 'bottom-right') {
+          conditionElement.align = 'right';
+          conditionElement.x = template.width - 2; // 2mm from right edge
+        }
+        
+        this.renderText(doc, conditionText, conditionElement);
+      }
     }
 
     // Render product image (if enabled and available)

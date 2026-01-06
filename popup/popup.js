@@ -12,6 +12,7 @@ class PopupController {
     this.saveDelay = 500;
     this.dimensionChangeTimeout = null;
     this.nameChangeTimeout = null;
+    this.fontSizeChangeTimeout = null;
 
     this.init();
   }
@@ -21,7 +22,7 @@ class PopupController {
       // Initialize services
       this.templateManager = new TemplateManager();
       this.settingsManager = new SettingsManager();
-      this.pdfGenerator = new PDFLabelGenerator(this.templateManager);
+      this.pdfGenerator = new PDFLabelGenerator(this.templateManager, this.settingsManager);
 
       await this.templateManager.init();
       await this.settingsManager.init();
@@ -65,6 +66,22 @@ class PopupController {
       settingsForm.addEventListener('change', () => this.autoSaveSettings());
       settingsForm.addEventListener('input', () => this.autoSaveSettings());
     }
+
+    // Font size inputs - immediate preview update
+    const fnskuFontSize = document.getElementById('fnsku-font-size');
+    const skuFontSize = document.getElementById('sku-font-size');
+    const titleFontSize = document.getElementById('title-font-size');
+
+    if (fnskuFontSize) fnskuFontSize.addEventListener('input', () => this.onFontSizeChange());
+    if (skuFontSize) skuFontSize.addEventListener('input', () => this.onFontSizeChange());
+    if (titleFontSize) titleFontSize.addEventListener('input', () => this.onFontSizeChange());
+
+    // Condition settings - immediate preview update
+    const conditionTextInput = document.getElementById('condition-text');
+    const conditionPositionSelect = document.getElementById('condition-position');
+
+    if (conditionTextInput) conditionTextInput.addEventListener('input', () => this.autoSaveSettings());
+    if (conditionPositionSelect) conditionPositionSelect.addEventListener('change', () => this.autoSaveSettings());
 
     // Hybrid template selector event handlers
     this.setupHybridTemplateSelector();
@@ -288,13 +305,15 @@ class PopupController {
         templateId = await this.settingsManager.getSelectedTemplateId();
       }
 
-      // Generate PDF using the unified system
-      const pdfBlob = await this.pdfGenerator.generateLabel({
+      // Generate PDF using the unified system (PDF generator gets settings from SettingsManager)
+      const pdfDoc = await this.pdfGenerator.generateLabels({
         sku: formData.sku,
         fnsku: formData.fnsku,
         asin: formData.asin,
         title: formData.title
-      }, templateId, formData.quantity);
+      }, formData.quantity, { templateId: templateId });
+
+      const pdfBlob = pdfDoc.output('blob');
 
       // Download the PDF
       const url = URL.createObjectURL(pdfBlob);
@@ -333,6 +352,7 @@ class PopupController {
       fnsku: document.getElementById('manual-fnsku').value.trim().toUpperCase(),
       asin: document.getElementById('manual-asin').value.trim().toUpperCase(),
       title: document.getElementById('manual-title').value.trim(),
+      condition: document.getElementById('manual-condition').value.trim() || 'NEW',
       quantity: parseInt(document.getElementById('manual-quantity').value) || 1
     };
   }
@@ -448,6 +468,7 @@ class PopupController {
     document.getElementById('manual-fnsku').value = 'X002HB9ZDL';
     document.getElementById('manual-asin').value = 'B0FXH65FKG';
     document.getElementById('manual-title').value = 'Absolute Eclipse Gafas de eclipse solar del ejército, probadas por ISO 12312-2 y con certificación CE, fabricante de la UE, paquete de 2 unidades, Eclipse Europe 2026';
+    document.getElementById('manual-condition').value = 'NEW';
     document.getElementById('manual-quantity').value = '2';
 
     // Clear any validation states
@@ -508,21 +529,44 @@ class PopupController {
       const includeSkuCheckbox = document.getElementById('include-sku');
       const includeTitleCheckbox = document.getElementById('include-title');
       const includeImagesCheckbox = document.getElementById('default-include-images');
+      const includeConditionCheckbox = document.getElementById('include-condition');
 
       if (includeBarcodeCheckbox) includeBarcodeCheckbox.checked = contentInclusion.barcode !== false;
       if (includeFnskuCheckbox) includeFnskuCheckbox.checked = contentInclusion.fnsku !== false;
       if (includeSkuCheckbox) includeSkuCheckbox.checked = contentInclusion.sku !== false;
       if (includeTitleCheckbox) includeTitleCheckbox.checked = contentInclusion.title !== false;
       if (includeImagesCheckbox) includeImagesCheckbox.checked = contentInclusion.images || false;
+      if (includeConditionCheckbox) includeConditionCheckbox.checked = contentInclusion.condition !== false;
 
-      // Font size inputs (from template or defaults)
+      // Condition settings
+      const conditionSettings = globalSettings.conditionSettings || {};
+      const conditionTextInput = document.getElementById('condition-text');
+      const conditionPositionSelect = document.getElementById('condition-position');
+
+      if (conditionTextInput) {
+        conditionTextInput.value = conditionSettings.text || 'NEW';
+      }
+      if (conditionPositionSelect) {
+        conditionPositionSelect.value = conditionSettings.position || 'bottom-left';
+      }
+
+      // Font size inputs (prioritize global overrides, then template defaults)
       const fnskuFontSize = document.getElementById('fnsku-font-size');
       const skuFontSize = document.getElementById('sku-font-size');
       const titleFontSize = document.getElementById('title-font-size');
 
-      if (fnskuFontSize) fnskuFontSize.value = selectedTemplate?.elements?.fnsku?.fontSize || 8;
-      if (skuFontSize) skuFontSize.value = selectedTemplate?.elements?.sku?.fontSize || 11;
-      if (titleFontSize) titleFontSize.value = selectedTemplate?.elements?.title?.fontSize || 6;
+      // Use font size overrides from global settings if available, otherwise use template defaults
+      const fontOverrides = globalSettings.fontSizeOverrides || {};
+
+      if (fnskuFontSize) {
+        fnskuFontSize.value = fontOverrides.fnsku || selectedTemplate?.elements?.fnsku?.fontSize || 8;
+      }
+      if (skuFontSize) {
+        skuFontSize.value = fontOverrides.sku || selectedTemplate?.elements?.sku?.fontSize || 11;
+      }
+      if (titleFontSize) {
+        titleFontSize.value = fontOverrides.title || selectedTemplate?.elements?.title?.fontSize || 6;
+      }
 
     } catch (error) {
       console.error('Failed to populate settings panel content:', error);
@@ -841,6 +885,31 @@ class PopupController {
   }
 
   /**
+   * Handle font size changes with debouncing
+   */
+  onFontSizeChange() {
+    // Clear existing timeout
+    if (this.fontSizeChangeTimeout) {
+      clearTimeout(this.fontSizeChangeTimeout);
+    }
+
+    // Set new timeout for debounced save and preview update
+    this.fontSizeChangeTimeout = setTimeout(async () => {
+      try {
+        // Auto-save the settings
+        await this.autoSaveSettings();
+
+        // Update the preview immediately to show font size changes
+        await this.updatePreview();
+
+        console.log('Font size changes applied');
+      } catch (error) {
+        console.error('Failed to handle font size change:', error);
+      }
+    }, 300);
+  }
+
+  /**
    * Update template name display with dimensions
    */
   async updateTemplateNameDisplay() {
@@ -964,13 +1033,33 @@ class PopupController {
       const autoOpenTabs = document.getElementById('auto-open-tabs')?.checked || false;
       const debugMode = document.getElementById('debug-mode')?.checked || false;
 
-      // Update global settings
+      // Get font size values
+      const fnskuFontSize = parseInt(document.getElementById('fnsku-font-size')?.value);
+      const skuFontSize = parseInt(document.getElementById('sku-font-size')?.value);
+      const titleFontSize = parseInt(document.getElementById('title-font-size')?.value);
+
+      // Get condition settings
+      const conditionText = document.getElementById('condition-text')?.value || 'NEW';
+      const conditionPosition = document.getElementById('condition-position')?.value || 'bottom-left';
+      const conditionEnabled = document.getElementById('include-condition')?.checked !== false;
+
+      // Update global settings including font size overrides and condition settings
       await this.settingsManager.setSelectedTemplateId(templateId);
       await this.settingsManager.updateGlobalSettings({
         barcodeFormat,
         autoExtract,
         autoOpenTabs,
-        debugMode
+        debugMode,
+        fontSizeOverrides: {
+          fnsku: fnskuFontSize && fnskuFontSize > 0 ? fnskuFontSize : null,
+          sku: skuFontSize && skuFontSize > 0 ? skuFontSize : null,
+          title: titleFontSize && titleFontSize > 0 ? titleFontSize : null
+        },
+        conditionSettings: {
+          enabled: conditionEnabled,
+          text: conditionText,
+          position: conditionPosition
+        }
       });
 
       // Get the current template and update its settings if it's user-created
@@ -984,23 +1073,32 @@ class PopupController {
             fnsku: document.getElementById('include-fnsku')?.checked !== false,
             sku: document.getElementById('include-sku')?.checked !== false,
             title: document.getElementById('include-title')?.checked !== false,
-            images: document.getElementById('default-include-images')?.checked || false
+            images: document.getElementById('default-include-images')?.checked || false,
+            condition: document.getElementById('include-condition')?.checked !== false
+          },
+          conditionSettings: {
+            enabled: conditionEnabled,
+            text: conditionText,
+            position: conditionPosition
           }
         };
 
         // Update font sizes if the template has elements
         if (updatedTemplate.elements) {
-          updatedTemplate.elements.forEach(element => {
-            if (element.type === 'text') {
-              if (element.content === 'fnsku') {
-                element.fontSize = parseInt(document.getElementById('fnsku-font-size')?.value) || element.fontSize;
-              } else if (element.content === 'sku') {
-                element.fontSize = parseInt(document.getElementById('sku-font-size')?.value) || element.fontSize;
-              } else if (element.content === 'title') {
-                element.fontSize = parseInt(document.getElementById('title-font-size')?.value) || element.fontSize;
-              }
-            }
-          });
+          // Update FNSKU font size
+          if (updatedTemplate.elements.fnsku && fnskuFontSize && fnskuFontSize > 0) {
+            updatedTemplate.elements.fnsku.fontSize = fnskuFontSize;
+          }
+
+          // Update SKU font size
+          if (updatedTemplate.elements.sku && skuFontSize && skuFontSize > 0) {
+            updatedTemplate.elements.sku.fontSize = skuFontSize;
+          }
+
+          // Update Title font size
+          if (updatedTemplate.elements.title && titleFontSize && titleFontSize > 0) {
+            updatedTemplate.elements.title.fontSize = titleFontSize;
+          }
         }
 
         // Save the updated template
@@ -1132,12 +1230,17 @@ class PopupController {
       const textContainer = document.createElement('div');
       textContainer.className = 'preview-text';
 
+      // Get current font size overrides from form inputs (live values)
+      const currentFnskuFontSize = parseInt(document.getElementById('fnsku-font-size')?.value) || templateInfo.elements?.fnsku?.fontSize || 8;
+      const currentSkuFontSize = parseInt(document.getElementById('sku-font-size')?.value) || templateInfo.elements?.sku?.fontSize || 11;
+      const currentTitleFontSize = parseInt(document.getElementById('title-font-size')?.value) || templateInfo.elements?.title?.fontSize || 6;
+
       // FNSKU text
       if (templateInfo.contentInclusion?.fnsku !== false) {
         const fnskuText = document.createElement('div');
         fnskuText.className = 'preview-fnsku';
         fnskuText.textContent = sampleData.fnsku;
-        fnskuText.style.fontSize = '8px';
+        fnskuText.style.fontSize = `${currentFnskuFontSize}px`;
         textContainer.appendChild(fnskuText);
       }
 
@@ -1146,7 +1249,7 @@ class PopupController {
         const skuText = document.createElement('div');
         skuText.className = 'preview-sku';
         skuText.textContent = `SKU: ${sampleData.sku}`;
-        skuText.style.fontSize = '11px';
+        skuText.style.fontSize = `${currentSkuFontSize}px`;
         textContainer.appendChild(skuText);
       }
 
@@ -1156,7 +1259,7 @@ class PopupController {
         titleText.className = 'preview-title';
         titleText.textContent = sampleData.title.length > 50 ?
           sampleData.title.substring(0, 47) + '...' : sampleData.title;
-        titleText.style.fontSize = '6px';
+        titleText.style.fontSize = `${currentTitleFontSize}px`;
         textContainer.appendChild(titleText);
       }
 

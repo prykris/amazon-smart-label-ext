@@ -12,7 +12,12 @@ class SettingsManager {
         autoExtract: true,
         autoOpenTabs: false,
         debugMode: false,
-        lastSelectedTab: 'downloads'
+        lastSelectedTab: 'downloads',
+        conditionSettings: {
+          enabled: true,
+          text: 'NEW',
+          position: 'bottom-left' // 'bottom-left', 'bottom-right', 'title-prefix'
+        }
       },
       lastUpdated: new Date().toISOString()
     };
@@ -29,7 +34,7 @@ class SettingsManager {
    */
   async init() {
     if (this.initialized) return;
-    
+
     try {
       await this.loadSettings();
       this.initialized = true;
@@ -64,14 +69,14 @@ class SettingsManager {
    */
   async setSelectedTemplateId(templateId) {
     await this.ensureInitialized();
-    
+
     if (this.settings.selectedTemplateId !== templateId) {
       this.settings.selectedTemplateId = templateId;
       this.settings.lastUpdated = new Date().toISOString();
-      
+
       this.emit('templateSelected', templateId);
       this.emit('settingsChanged', this.settings);
-      
+
       await this.debouncedSave();
     }
   }
@@ -91,16 +96,16 @@ class SettingsManager {
    */
   async updateGlobalSettings(newSettings) {
     await this.ensureInitialized();
-    
+
     const hasChanges = this.hasSettingsChanges(this.settings.globalSettings, newSettings);
-    
+
     if (hasChanges) {
       this.settings.globalSettings = { ...this.settings.globalSettings, ...newSettings };
       this.settings.lastUpdated = new Date().toISOString();
-      
+
       this.emit('globalSettingsChanged', this.settings.globalSettings);
       this.emit('settingsChanged', this.settings);
-      
+
       await this.debouncedSave();
     }
   }
@@ -112,15 +117,15 @@ class SettingsManager {
    */
   async updateSetting(key, value) {
     await this.ensureInitialized();
-    
+
     if (this.settings.globalSettings[key] !== value) {
       this.settings.globalSettings[key] = value;
       this.settings.lastUpdated = new Date().toISOString();
-      
+
       this.emit('settingChanged', { key, value });
       this.emit('globalSettingsChanged', this.settings.globalSettings);
       this.emit('settingsChanged', this.settings);
-      
+
       await this.debouncedSave();
     }
   }
@@ -130,25 +135,30 @@ class SettingsManager {
    */
   async resetSettings() {
     await this.ensureInitialized();
-    
+
     const defaultSettings = {
       selectedTemplateId: 'thermal_57x32',
       globalSettings: {
         barcodeFormat: 'CODE128',
         autoExtract: true,
         autoOpenTabs: false,
-        debugMode: false
+        debugMode: false,
+        conditionSettings: {
+          enabled: true,
+          text: 'NEW',
+          position: 'bottom-left'
+        }
       },
       lastUpdated: new Date().toISOString()
     };
 
     this.settings = defaultSettings;
-    
+
     this.emit('settingsReset', this.settings);
     this.emit('settingsChanged', this.settings);
-    
+
     await this.saveSettings();
-    
+
     return { ...this.settings };
   }
 
@@ -159,7 +169,7 @@ class SettingsManager {
     try {
       // Try new unified storage first
       const result = await chrome.storage.sync.get(['fnsku_extension_settings']);
-      
+
       if (result.fnsku_extension_settings) {
         this.settings = { ...this.settings, ...result.fnsku_extension_settings };
       } else {
@@ -187,28 +197,28 @@ class SettingsManager {
       // Migrate from old fnskuLabelSettings
       if (oldResult.fnskuLabelSettings) {
         const oldSettings = oldResult.fnskuLabelSettings;
-        
+
         // Map old settings to new format
         if (oldSettings.templateId) {
           this.settings.selectedTemplateId = oldSettings.templateId;
           migrated = true;
         }
-        
+
         if (oldSettings.barcodeFormat) {
           this.settings.globalSettings.barcodeFormat = oldSettings.barcodeFormat;
           migrated = true;
         }
-        
+
         if (typeof oldSettings.autoExtract !== 'undefined') {
           this.settings.globalSettings.autoExtract = oldSettings.autoExtract;
           migrated = true;
         }
-        
+
         if (typeof oldSettings.autoOpenTabs !== 'undefined') {
           this.settings.globalSettings.autoOpenTabs = oldSettings.autoOpenTabs;
           migrated = true;
         }
-        
+
         if (typeof oldSettings.debugMode !== 'undefined') {
           this.settings.globalSettings.debugMode = oldSettings.debugMode;
           migrated = true;
@@ -218,7 +228,7 @@ class SettingsManager {
       // Migrate from old extensionSettings
       if (oldResult.extensionSettings && oldResult.extensionSettings.labelSettings) {
         const oldLabelSettings = oldResult.extensionSettings.labelSettings;
-        
+
         if (oldLabelSettings.template) {
           this.settings.selectedTemplateId = oldLabelSettings.template;
           migrated = true;
@@ -228,14 +238,14 @@ class SettingsManager {
       if (migrated) {
         this.settings.lastUpdated = new Date().toISOString();
         await this.saveSettings();
-        
+
         // Clean up old storage keys
         try {
           await chrome.storage.sync.remove(['fnskuLabelSettings', 'extensionSettings']);
         } catch (error) {
           console.warn('Failed to clean up old storage keys:', error);
         }
-        
+
         console.log('Settings migrated from old format');
       }
     } catch (error) {
@@ -248,14 +258,14 @@ class SettingsManager {
    */
   async saveSettings() {
     if (this.saving) return;
-    
+
     this.saving = true;
-    
+
     try {
       await chrome.storage.sync.set({
         fnsku_extension_settings: this.settings
       });
-      
+
       this.emit('settingsSaved', this.settings);
     } catch (error) {
       console.error('Failed to save settings:', error);
@@ -297,19 +307,19 @@ class SettingsManager {
   hasSettingsChanges(oldSettings, newSettings) {
     const oldKeys = Object.keys(oldSettings);
     const newKeys = Object.keys(newSettings);
-    
+
     // Check if keys are different
     if (oldKeys.length !== newKeys.length) {
       return true;
     }
-    
+
     // Check if values are different
     for (const key of newKeys) {
       if (oldSettings[key] !== newSettings[key]) {
         return true;
       }
     }
-    
+
     return false;
   }
 
@@ -339,7 +349,7 @@ class SettingsManager {
       clearTimeout(this.saveTimeout);
       this.saveTimeout = null;
     }
-    
+
     await this.saveSettings();
   }
 
@@ -424,7 +434,7 @@ class SettingsManager {
       await chrome.storage.sync.set({
         fnsku_extension_state: state
       });
-      
+
       this.emit('extensionStateChanged', state);
     } catch (error) {
       console.error('Failed to set extension state:', error);
@@ -438,7 +448,7 @@ class SettingsManager {
    */
   async exportSettings() {
     await this.ensureInitialized();
-    
+
     return {
       settings: { ...this.settings },
       exportedAt: new Date().toISOString(),
@@ -462,12 +472,12 @@ class SettingsManager {
     };
 
     this.settings = newSettings;
-    
+
     this.emit('settingsImported', this.settings);
     this.emit('settingsChanged', this.settings);
-    
+
     await this.saveSettings();
-    
+
     return { ...this.settings };
   }
 
@@ -479,7 +489,7 @@ class SettingsManager {
       clearTimeout(this.saveTimeout);
       this.saveTimeout = null;
     }
-    
+
     this.eventListeners.clear();
     this.initialized = false;
   }

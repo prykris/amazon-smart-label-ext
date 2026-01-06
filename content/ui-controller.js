@@ -113,26 +113,8 @@ class UIController {
           throw new Error(validation.errors.join(', '));
         }
 
-        // Get current settings and selected template
-        const currentSettings = await this.getCurrentSettings();
-        const selectedTemplate = await this.getSelectedTemplate();
-
-        // Prepare generation settings
-        const generationSettings = {
-          templateId: selectedTemplate?.id || 'thermal_57x32',
-          template: selectedTemplate,
-          barcodeFormat: currentSettings.globalSettings?.barcodeFormat || 'CODE128',
-          contentInclusion: selectedTemplate?.contentInclusion || {
-            barcode: true,
-            fnsku: true,
-            sku: true,
-            title: true,
-            images: false
-          }
-        };
-
-        // Generate PDF
-        const doc = await this.pdfGenerator.generateLabels(productData, qty, generationSettings);
+        // Generate PDF (PDF generator gets all settings from SettingsManager)
+        const doc = await this.pdfGenerator.generateLabels(productData, qty);
 
         if (this.activeModifiers.has('ctrl')) {
           // Ctrl + Click: Open in new tab

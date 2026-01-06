@@ -19,19 +19,26 @@ class TemplateManager {
           barcode: { x: 4, y: 2, width: 49, height: 12 },
           fnsku: { x: 28.5, y: 17, fontSize: 8, align: 'center', bold: false },
           sku: { x: 28.5, y: 22, fontSize: 11, align: 'center', bold: true },
-          title: { x: 28.5, y: 26, fontSize: 6, align: 'center', maxLength: 50 }
+          title: { x: 28.5, y: 26, fontSize: 6, align: 'center', maxLength: 50 },
+          condition: { x: 2, y: 30, fontSize: 5, align: 'left', bold: false }
         },
         contentInclusion: {
           barcode: true,
           fnsku: true,
           sku: true,
           title: true,
-          images: false
+          images: false,
+          condition: true
+        },
+        conditionSettings: {
+          position: 'bottom-left', // 'bottom-left', 'bottom-right', 'title-prefix'
+          text: 'NEW',
+          enabled: true
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z'
       },
-      
+
       thermal_57x32_minimal: {
         id: 'thermal_57x32_minimal',
         name: 'Thermal Minimal',
@@ -43,14 +50,21 @@ class TemplateManager {
         orientation: 'landscape',
         elements: {
           barcode: { x: 4, y: 4, width: 49, height: 16 },
-          fnsku: { x: 28.5, y: 24, fontSize: 10, align: 'center', bold: true }
+          fnsku: { x: 28.5, y: 24, fontSize: 10, align: 'center', bold: true },
+          condition: { x: 2, y: 30, fontSize: 5, align: 'left', bold: false }
         },
         contentInclusion: {
           barcode: true,
           fnsku: true,
           sku: false,
           title: false,
-          images: false
+          images: false,
+          condition: true
+        },
+        conditionSettings: {
+          position: 'bottom-left',
+          text: 'NEW',
+          enabled: true
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z'
@@ -70,14 +84,21 @@ class TemplateManager {
           fnsku: { x: 50.8, y: 50, fontSize: 12, align: 'center', bold: false },
           sku: { x: 50.8, y: 70, fontSize: 16, align: 'center', bold: true },
           title: { x: 50.8, y: 90, fontSize: 10, align: 'center', maxLength: 80 },
-          image: { x: 10, y: 100, width: 30, height: 30 }
+          image: { x: 10, y: 100, width: 30, height: 30 },
+          condition: { x: 10, y: 140, fontSize: 8, align: 'left', bold: false }
         },
         contentInclusion: {
           barcode: true,
           fnsku: true,
           sku: true,
           title: true,
-          images: true
+          images: true,
+          condition: true
+        },
+        conditionSettings: {
+          position: 'bottom-left',
+          text: 'NEW',
+          enabled: true
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z'
@@ -94,7 +115,7 @@ class TemplateManager {
    */
   async init() {
     if (this.initialized) return;
-    
+
     try {
       await this.loadUserTemplates();
       this.initialized = true;
@@ -115,7 +136,7 @@ class TemplateManager {
     const width = template.width || 0;
     const height = template.height || 0;
     const units = template.units || 'mm';
-    
+
     return `${baseName} ${width}×${height}${units}`;
   }
 
@@ -125,17 +146,17 @@ class TemplateManager {
    */
   async getAllTemplates() {
     await this.ensureInitialized();
-    
+
     const builtInList = Object.values(this.builtInTemplates).map(template => ({
       ...template,
       displayName: this.generateDynamicName(template)
     }));
-    
+
     const userList = Object.values(this.userTemplates).map(template => ({
       ...template,
       displayName: this.generateDynamicName(template)
     }));
-    
+
     return [...builtInList, ...userList];
   }
 
@@ -146,17 +167,17 @@ class TemplateManager {
    */
   async getTemplate(templateId) {
     await this.ensureInitialized();
-    
+
     // Check built-in templates first
     if (this.builtInTemplates[templateId]) {
       return { ...this.builtInTemplates[templateId] };
     }
-    
+
     // Check user templates
     if (this.userTemplates[templateId]) {
       return { ...this.userTemplates[templateId] };
     }
-    
+
     return null;
   }
 
@@ -167,7 +188,7 @@ class TemplateManager {
    */
   async createTemplate(templateData) {
     await this.ensureInitialized();
-    
+
     // Validate template data
     const validation = this.validateTemplate(templateData);
     if (!validation.isValid) {
@@ -176,7 +197,7 @@ class TemplateManager {
 
     // Generate unique ID
     const templateId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     const template = {
       id: templateId,
       userCreated: true,
@@ -187,13 +208,13 @@ class TemplateManager {
 
     // Add to user templates
     this.userTemplates[templateId] = template;
-    
+
     // Save to storage
     await this.saveUserTemplates();
-    
+
     // Emit event
     this.emit('templateCreated', template);
-    
+
     return { ...template };
   }
 
@@ -205,7 +226,7 @@ class TemplateManager {
    */
   async updateTemplate(templateId, templateData) {
     await this.ensureInitialized();
-    
+
     // Check if template exists and is user-created
     if (!this.userTemplates[templateId]) {
       throw new Error('Template not found or cannot be modified');
@@ -227,13 +248,13 @@ class TemplateManager {
     };
 
     this.userTemplates[templateId] = updatedTemplate;
-    
+
     // Save to storage
     await this.saveUserTemplates();
-    
+
     // Emit event
     this.emit('templateUpdated', updatedTemplate);
-    
+
     return { ...updatedTemplate };
   }
 
@@ -244,7 +265,7 @@ class TemplateManager {
    */
   async deleteTemplate(templateId) {
     await this.ensureInitialized();
-    
+
     // Check if template exists and is user-created
     if (!this.userTemplates[templateId]) {
       throw new Error('Template not found or cannot be deleted');
@@ -252,13 +273,13 @@ class TemplateManager {
 
     const template = { ...this.userTemplates[templateId] };
     delete this.userTemplates[templateId];
-    
+
     // Save to storage
     await this.saveUserTemplates();
-    
+
     // Emit event
     this.emit('templateDeleted', template);
-    
+
     return true;
   }
 
@@ -336,7 +357,7 @@ class TemplateManager {
           }
         }
 
-        if (['fnsku', 'sku', 'title'].includes(elementName)) {
+        if (['fnsku', 'sku', 'title', 'condition'].includes(elementName)) {
           if (typeof element.fontSize !== 'number' || element.fontSize <= 0) {
             validation.errors.push(`Element ${elementName} fontSize must be a positive number`);
             validation.isValid = false;
@@ -349,6 +370,30 @@ class TemplateManager {
     if (!template.contentInclusion || typeof template.contentInclusion !== 'object') {
       validation.errors.push('Template contentInclusion is required');
       validation.isValid = false;
+    }
+
+    // Condition settings validation (optional)
+    if (template.conditionSettings) {
+      if (typeof template.conditionSettings !== 'object') {
+        validation.errors.push('Template conditionSettings must be an object');
+        validation.isValid = false;
+      } else {
+        const validPositions = ['bottom-left', 'bottom-right', 'title-prefix'];
+        if (template.conditionSettings.position && !validPositions.includes(template.conditionSettings.position)) {
+          validation.errors.push(`Condition position must be one of: ${validPositions.join(', ')}`);
+          validation.isValid = false;
+        }
+
+        if (template.conditionSettings.text && typeof template.conditionSettings.text !== 'string') {
+          validation.errors.push('Condition text must be a string');
+          validation.isValid = false;
+        }
+
+        if (template.conditionSettings.enabled !== undefined && typeof template.conditionSettings.enabled !== 'boolean') {
+          validation.errors.push('Condition enabled must be a boolean');
+          validation.isValid = false;
+        }
+      }
     }
 
     // Warnings for best practices
@@ -474,14 +519,14 @@ class TemplateManager {
    */
   async clearUserTemplates() {
     await this.ensureInitialized();
-    
+
     const deletedTemplates = { ...this.userTemplates };
     this.userTemplates = {};
-    
+
     await this.saveUserTemplates();
-    
+
     this.emit('templatesCleared', deletedTemplates);
-    
+
     return true;
   }
 
@@ -501,7 +546,7 @@ class TemplateManager {
     delete exportData.id;
     delete exportData.createdAt;
     delete exportData.updatedAt;
-    
+
     return exportData;
   }
 

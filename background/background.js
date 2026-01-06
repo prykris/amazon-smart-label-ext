@@ -41,32 +41,27 @@ class BackgroundService {
     // Set default settings on first install
     if (details.reason === 'install') {
       const defaultSettings = {
-        template: 'thermal_57x32',
-        barcodeFormat: 'CODE128',
-        includeImage: false,
-        includeBarcode: true,
-        includeFnsku: true,
-        includeSku: true,
-        includeTitle: true,
-        autoOpenTabs: false,
-        debugMode: false,
-        autoExtract: true,
-        fontSize: {
-          fnsku: 8,
-          sku: 11,
-          title: 6
+        selectedTemplateId: 'thermal_57x32',
+        globalSettings: {
+          barcodeFormat: 'CODE128',
+          autoExtract: true,
+          autoOpenTabs: false,
+          debugMode: false
         },
-        customWidth: 57,
-        customHeight: 32
+        lastUpdated: new Date().toISOString()
+      };
+
+      const defaultExtensionState = {
+        extensionEnabled: true,
+        installDate: new Date().toISOString()
       };
 
       try {
         await chrome.storage.sync.set({
-          fnskuLabelSettings: defaultSettings,
-          extensionEnabled: true,
-          installDate: new Date().toISOString()
+          fnsku_extension_settings: defaultSettings,
+          fnsku_extension_state: defaultExtensionState
         });
-        console.log('Default settings initialized');
+        console.log('Default settings initialized with unified schema');
       } catch (error) {
         console.error('Failed to set default settings:', error);
       }
@@ -194,22 +189,44 @@ class BackgroundService {
   async getSettings() {
     try {
       const result = await chrome.storage.sync.get([
-        'fnskuLabelSettings',
-        'extensionEnabled',
-        'installDate'
+        'fnsku_extension_settings',
+        'fnsku_extension_state'
       ]);
 
+      const settings = result.fnsku_extension_settings || {
+        selectedTemplateId: 'thermal_57x32',
+        globalSettings: {
+          barcodeFormat: 'CODE128',
+          autoExtract: true,
+          autoOpenTabs: false,
+          debugMode: false
+        },
+        lastUpdated: new Date().toISOString()
+      };
+
+      const extensionState = result.fnsku_extension_state || {
+        extensionEnabled: true,
+        installDate: new Date().toISOString()
+      };
+
       return {
-        labelSettings: result.fnskuLabelSettings || {},
-        extensionEnabled: result.extensionEnabled !== false,
-        installDate: result.installDate
+        ...settings,
+        extensionEnabled: extensionState.extensionEnabled,
+        installDate: extensionState.installDate
       };
     } catch (error) {
       console.error('Failed to get settings:', error);
       return {
-        labelSettings: {},
+        selectedTemplateId: 'thermal_57x32',
+        globalSettings: {
+          barcodeFormat: 'CODE128',
+          autoExtract: true,
+          autoOpenTabs: false,
+          debugMode: false
+        },
         extensionEnabled: true,
-        installDate: null
+        installDate: null,
+        lastUpdated: new Date().toISOString()
       };
     }
   }
@@ -222,25 +239,49 @@ class BackgroundService {
     try {
       console.log('Background: Received settings to save:', settings);
       
-      // Handle both old and new settings structure
-      const settingsToSave = {};
-      
+      // Use unified storage schema
+      const settingsToSave = {
+        fnsku_extension_settings: {
+          selectedTemplateId: settings.selectedTemplateId || settings.templateId || 'thermal_57x32',
+          globalSettings: settings.globalSettings || {
+            barcodeFormat: settings.barcodeFormat || 'CODE128',
+            autoExtract: settings.autoExtract !== false,
+            autoOpenTabs: settings.autoOpenTabs || false,
+            debugMode: settings.debugMode || false
+          },
+          lastUpdated: new Date().toISOString()
+        }
+      };
+
+      // Handle legacy labelSettings structure
       if (settings.labelSettings) {
-        // New structure from popup
-        settingsToSave.fnskuLabelSettings = settings.labelSettings;
-      } else if (settings.fnskuLabelSettings) {
-        // Old structure - keep as is
-        settingsToSave.fnskuLabelSettings = settings.fnskuLabelSettings;
-      } else {
-        // Direct settings object
-        settingsToSave.fnskuLabelSettings = settings;
+        settingsToSave.fnsku_extension_settings.selectedTemplateId = settings.labelSettings.templateId || 'thermal_57x32';
+        settingsToSave.fnsku_extension_settings.globalSettings = {
+          barcodeFormat: settings.labelSettings.barcodeFormat || 'CODE128',
+          autoExtract: settings.labelSettings.autoExtract !== false,
+          autoOpenTabs: settings.labelSettings.autoOpenTabs || false,
+          debugMode: settings.labelSettings.debugMode || false
+        };
       }
       
-      console.log('Background: Saving to storage:', settingsToSave);
+      console.log('Background: Saving to unified storage:', settingsToSave);
       await chrome.storage.sync.set(settingsToSave);
       console.log('Background: Settings saved successfully');
 
       // Notify all Amazon Seller Central tabs about settings change
+      await this.notifyTabsOfSettingsChange(settings);
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Notify tabs about settings changes
+   * @param {Object} settings - Updated settings
+   */
+  async notifyTabsOfSettingsChange(settings) {
+    try {
       const tabs = await chrome.tabs.query({
         url: [
           'https://sellercentral.amazon.com/*',
@@ -269,8 +310,7 @@ class BackgroundService {
         }
       }
     } catch (error) {
-      console.error('Failed to save settings:', error);
-      throw error;
+      console.error('Failed to notify tabs of settings change:', error);
     }
   }
 
@@ -283,9 +323,32 @@ class BackgroundService {
       const settings = await this.getSettings();
       const newState = !settings.extensionEnabled;
 
-      await chrome.storage.sync.set({ extensionEnabled: newState });
+      // Update extension state in unified storage
+      const extensionState = {
+        extensionEnabled: newState,
+        installDate: settings.installDate || new Date().toISOString()
+      };
+
+      await chrome.storage.sync.set({
+        fnsku_extension_state: extensionState
+      });
 
       // Notify all tabs about state change
+      await this.notifyTabsOfExtensionToggle(newState);
+
+      return newState;
+    } catch (error) {
+      console.error('Failed to toggle extension:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Notify tabs about extension toggle
+   * @param {boolean} enabled - New enabled state
+   */
+  async notifyTabsOfExtensionToggle(enabled) {
+    try {
       const tabs = await chrome.tabs.query({
         url: [
           'https://sellercentral.amazon.com/*',
@@ -305,17 +368,14 @@ class BackgroundService {
       for (const tab of tabs) {
         try {
           await chrome.tabs.sendMessage(tab.id, {
-            action: newState ? 'enable' : 'disable'
+            action: enabled ? 'enable' : 'disable'
           });
         } catch (error) {
           console.debug('Could not notify tab about extension toggle:', tab.id);
         }
       }
-
-      return newState;
     } catch (error) {
-      console.error('Failed to toggle extension:', error);
-      throw error;
+      console.error('Failed to notify tabs of extension toggle:', error);
     }
   }
 

@@ -5,6 +5,8 @@
 
 class AmazonFNSKUExtension {
   constructor() {
+    this.templateManager = null;
+    this.settingsManager = null;
     this.dataExtractor = null;
     this.pdfGenerator = null;
     this.uiController = null;
@@ -23,10 +25,22 @@ class AmazonFNSKUExtension {
       // Wait for required libraries to load
       await this.waitForLibraries();
       
-      // Initialize components
+      // Initialize core services
+      this.templateManager = new TemplateManager();
+      await this.templateManager.init();
+      
+      this.settingsManager = new SettingsManager();
+      await this.settingsManager.init();
+      
+      // Initialize components with services
       this.dataExtractor = new AmazonDataExtractor();
-      this.pdfGenerator = new PDFLabelGenerator();
-      this.uiController = new UIController(this.dataExtractor, this.pdfGenerator);
+      this.pdfGenerator = new PDFLabelGenerator(this.templateManager);
+      this.uiController = new UIController(
+        this.dataExtractor,
+        this.pdfGenerator,
+        this.settingsManager,
+        this.templateManager
+      );
       
       // Start observing DOM changes
       this.startObserver();
@@ -49,7 +63,7 @@ class AmazonFNSKUExtension {
   waitForLibraries() {
     return new Promise((resolve, reject) => {
       const checkLibraries = () => {
-        if (window.jspdf && window.JsBarcode) {
+        if (window.jspdf && window.JsBarcode && window.TemplateManager && window.SettingsManager) {
           resolve();
         } else {
           setTimeout(checkLibraries, 100);
@@ -60,8 +74,8 @@ class AmazonFNSKUExtension {
       
       // Timeout after 10 seconds
       setTimeout(() => {
-        if (!window.jspdf || !window.JsBarcode) {
-          reject(new Error('Required libraries failed to load'));
+        if (!window.jspdf || !window.JsBarcode || !window.TemplateManager || !window.SettingsManager) {
+          reject(new Error('Required libraries or services failed to load'));
         }
       }, 10000);
     });
@@ -258,6 +272,11 @@ class AmazonFNSKUExtension {
       this.uiController.closeConfigurationDialog();
     }
     
+    // Cleanup services
+    if (this.settingsManager) {
+      this.settingsManager.cleanup();
+    }
+    
     this.processedRows.clear();
     this.isInitialized = false;
     
@@ -308,7 +327,7 @@ window.addEventListener('beforeunload', () => {
   }
 });
 
-// Handle extension disable/enable
+// Handle extension disable/enable and settings updates
 chrome.runtime.onMessage?.addListener((request, sender, sendResponse) => {
   if (request.action === 'disable') {
     if (window.amazonFNSKUExtension) {
@@ -317,6 +336,18 @@ chrome.runtime.onMessage?.addListener((request, sender, sendResponse) => {
   } else if (request.action === 'enable') {
     if (!window.amazonFNSKUExtension || !window.amazonFNSKUExtension.isInitialized) {
       window.amazonFNSKUExtension = new AmazonFNSKUExtension();
+    }
+  } else if (request.action === 'settingsUpdated') {
+    // Notify components about settings update
+    if (window.amazonFNSKUExtension && window.amazonFNSKUExtension.isInitialized) {
+      if (window.amazonFNSKUExtension.settingsManager) {
+        // Reload settings from storage
+        window.amazonFNSKUExtension.settingsManager.loadSettings();
+      }
+      if (window.amazonFNSKUExtension.uiController) {
+        // Update UI controller settings
+        window.amazonFNSKUExtension.uiController.handleSettingsUpdate(request.settings);
+      }
     }
   }
   

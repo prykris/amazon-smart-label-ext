@@ -41,6 +41,8 @@
             "js": [
                 "lib/jspdf.umd.min.js",
                 "lib/jsbarcode.all.min.js",
+                "content/template-manager.js",
+                "content/settings-manager.js",
                 "content/extractor.js",
                 "content/pdf-generator.js",
                 "content/ui-controller.js",

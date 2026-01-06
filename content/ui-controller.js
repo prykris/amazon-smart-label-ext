@@ -4,9 +4,11 @@
  */
 
 class UIController {
-  constructor(dataExtractor, pdfGenerator) {
+  constructor(dataExtractor, pdfGenerator, settingsManager = null, templateManager = null) {
     this.dataExtractor = dataExtractor;
     this.pdfGenerator = pdfGenerator;
+    this.settingsManager = settingsManager;
+    this.templateManager = templateManager;
     this.activeModifiers = new Set();
     this.configDialog = null;
     this.settings = {};
@@ -111,8 +113,26 @@ class UIController {
           throw new Error(validation.errors.join(', '));
         }
 
+        // Get current settings and selected template
+        const currentSettings = await this.getCurrentSettings();
+        const selectedTemplate = await this.getSelectedTemplate();
+
+        // Prepare generation settings
+        const generationSettings = {
+          templateId: selectedTemplate?.id || 'thermal_57x32',
+          template: selectedTemplate,
+          barcodeFormat: currentSettings.globalSettings?.barcodeFormat || 'CODE128',
+          contentInclusion: selectedTemplate?.contentInclusion || {
+            barcode: true,
+            fnsku: true,
+            sku: true,
+            title: true,
+            images: false
+          }
+        };
+
         // Generate PDF
-        const doc = await this.pdfGenerator.generateLabels(productData, qty, this.settings);
+        const doc = await this.pdfGenerator.generateLabels(productData, qty, generationSettings);
 
         if (this.activeModifiers.has('ctrl')) {
           // Ctrl + Click: Open in new tab
@@ -220,9 +240,15 @@ class UIController {
    * @param {HTMLElement} rowElement - Product row element (optional)
    * @returns {HTMLElement} Dialog element
    */
-  createConfigurationDialog(rowElement) {
+  async createConfigurationDialog(rowElement) {
     const dialog = document.createElement('div');
     dialog.className = 'fnsku-config-dialog';
+
+    // Get available templates
+    const templates = await this.getAvailableTemplates();
+    const templateOptions = templates.map(template =>
+      `<option value="${template.id}">${template.name}</option>`
+    ).join('');
 
     dialog.innerHTML = `
       <div class="dialog-overlay"></div>
@@ -236,23 +262,8 @@ class UIController {
           <div class="config-section">
             <h4>Label Template</h4>
             <select id="template-select" class="config-input">
-              <option value="thermal_57x32">Thermal 57x32mm</option>
-              <option value="thermal_57x32_minimal">Thermal 57x32mm (Minimal)</option>
-              <option value="shipping_4x6">Shipping 4"x6"</option>
-              <option value="custom">Custom Size</option>
+              ${templateOptions}
             </select>
-          </div>
-          
-          <div class="config-section custom-size-section" style="display: none;">
-            <h4>Custom Dimensions</h4>
-            <div class="input-group">
-              <label>Width (mm):</label>
-              <input type="number" id="custom-width" class="config-input" min="10" max="300" value="57">
-            </div>
-            <div class="input-group">
-              <label>Height (mm):</label>
-              <input type="number" id="custom-height" class="config-input" min="10" max="300" value="32">
-            </div>
           </div>
           
           <div class="config-section">
@@ -268,9 +279,31 @@ class UIController {
             <h4>Content Options</h4>
             <div class="checkbox-group">
               <label>
+                <input type="checkbox" id="include-barcode" class="config-checkbox">
+                Include barcode
+              </label>
+              <label>
+                <input type="checkbox" id="include-fnsku" class="config-checkbox">
+                Include FNSKU
+              </label>
+              <label>
+                <input type="checkbox" id="include-sku" class="config-checkbox">
+                Include SKU
+              </label>
+              <label>
+                <input type="checkbox" id="include-title" class="config-checkbox">
+                Include title
+              </label>
+              <label>
                 <input type="checkbox" id="include-image" class="config-checkbox">
                 Include product image
               </label>
+            </div>
+          </div>
+          
+          <div class="config-section">
+            <h4>App Settings</h4>
+            <div class="checkbox-group">
               <label>
                 <input type="checkbox" id="auto-extract" class="config-checkbox">
                 Auto-extract on page load
@@ -285,22 +318,6 @@ class UIController {
               </label>
             </div>
           </div>
-          
-          <div class="config-section">
-            <h4>Font Sizes</h4>
-            <div class="input-group">
-              <label>FNSKU:</label>
-              <input type="number" id="fnsku-font-size" class="config-input" min="4" max="20" value="8">
-            </div>
-            <div class="input-group">
-              <label>SKU:</label>
-              <input type="number" id="sku-font-size" class="config-input" min="4" max="20" value="11">
-            </div>
-            <div class="input-group">
-              <label>Title:</label>
-              <input type="number" id="title-font-size" class="config-input" min="4" max="20" value="6">
-            </div>
-          </div>
         </div>
         
         <div class="dialog-footer">
@@ -311,7 +328,7 @@ class UIController {
     `;
 
     // Load current settings
-    this.populateConfigDialog(dialog);
+    await this.populateConfigDialog(dialog);
 
     // Event listeners
     this.setupConfigDialogEvents(dialog, rowElement);
@@ -323,37 +340,38 @@ class UIController {
    * Populate configuration dialog with current settings
    * @param {HTMLElement} dialog - Dialog element
    */
-  populateConfigDialog(dialog) {
+  async populateConfigDialog(dialog) {
+    const currentSettings = await this.getCurrentSettings();
+    const selectedTemplate = await this.getSelectedTemplate();
+
     const templateSelect = dialog.querySelector('#template-select');
-    const customWidthInput = dialog.querySelector('#custom-width');
-    const customHeightInput = dialog.querySelector('#custom-height');
     const barcodeFormatSelect = dialog.querySelector('#barcode-format');
+    const includeBarcodeCheckbox = dialog.querySelector('#include-barcode');
+    const includeFnskuCheckbox = dialog.querySelector('#include-fnsku');
+    const includeSkuCheckbox = dialog.querySelector('#include-sku');
+    const includeTitleCheckbox = dialog.querySelector('#include-title');
     const includeImageCheckbox = dialog.querySelector('#include-image');
-    const fnskuFontSize = dialog.querySelector('#fnsku-font-size');
-    const skuFontSize = dialog.querySelector('#sku-font-size');
-    const titleFontSize = dialog.querySelector('#title-font-size');
 
     // Set values from current settings
-    if (templateSelect) templateSelect.value = this.settings.template || 'thermal_57x32';
-    if (customWidthInput) customWidthInput.value = this.settings.customWidth || 57;
-    if (customHeightInput) customHeightInput.value = this.settings.customHeight || 32;
-    if (barcodeFormatSelect) barcodeFormatSelect.value = this.settings.barcodeFormat || 'CODE128';
-    if (includeImageCheckbox) includeImageCheckbox.checked = this.settings.includeImage || false;
-    if (fnskuFontSize) fnskuFontSize.value = this.settings.fontSize?.fnsku || 8;
-    if (skuFontSize) skuFontSize.value = this.settings.fontSize?.sku || 11;
-    if (titleFontSize) titleFontSize.value = this.settings.fontSize?.title || 6;
+    if (templateSelect) templateSelect.value = selectedTemplate?.id || 'thermal_57x32';
+    if (barcodeFormatSelect) barcodeFormatSelect.value = currentSettings.globalSettings?.barcodeFormat || 'CODE128';
+
+    // Set content inclusion checkboxes
+    const contentInclusion = selectedTemplate?.contentInclusion || {};
+    if (includeBarcodeCheckbox) includeBarcodeCheckbox.checked = contentInclusion.barcode !== false;
+    if (includeFnskuCheckbox) includeFnskuCheckbox.checked = contentInclusion.fnsku !== false;
+    if (includeSkuCheckbox) includeSkuCheckbox.checked = contentInclusion.sku !== false;
+    if (includeTitleCheckbox) includeTitleCheckbox.checked = contentInclusion.title !== false;
+    if (includeImageCheckbox) includeImageCheckbox.checked = contentInclusion.images || false;
 
     // Set additional checkbox values
     const autoExtractCheckbox = dialog.querySelector('#auto-extract');
     const autoOpenTabsCheckbox = dialog.querySelector('#auto-open-tabs');
     const debugModeCheckbox = dialog.querySelector('#debug-mode');
 
-    if (autoExtractCheckbox) autoExtractCheckbox.checked = this.settings.autoExtract !== false;
-    if (autoOpenTabsCheckbox) autoOpenTabsCheckbox.checked = this.settings.autoOpenTabs || false;
-    if (debugModeCheckbox) debugModeCheckbox.checked = this.settings.debugMode || false;
-
-    // Show/hide custom size section
-    this.toggleCustomSizeSection(dialog, templateSelect.value === 'custom');
+    if (autoExtractCheckbox) autoExtractCheckbox.checked = currentSettings.globalSettings?.autoExtract !== false;
+    if (autoOpenTabsCheckbox) autoOpenTabsCheckbox.checked = currentSettings.globalSettings?.autoOpenTabs || false;
+    if (debugModeCheckbox) debugModeCheckbox.checked = currentSettings.globalSettings?.debugMode || false;
   }
 
   /**
@@ -429,36 +447,48 @@ class UIController {
    * Save configuration settings
    * @param {HTMLElement} dialog - Dialog element
    */
-  saveConfigurationSettings(dialog) {
-    const settings = {
-      template: dialog.querySelector('#template-select').value,
-      customWidth: parseInt(dialog.querySelector('#custom-width').value),
-      customHeight: parseInt(dialog.querySelector('#custom-height').value),
-      barcodeFormat: dialog.querySelector('#barcode-format').value,
-      includeImage: dialog.querySelector('#include-image').checked,
-      autoExtract: dialog.querySelector('#auto-extract').checked,
-      autoOpenTabs: dialog.querySelector('#auto-open-tabs').checked,
-      debugMode: dialog.querySelector('#debug-mode').checked,
-      fontSize: {
-        fnsku: parseInt(dialog.querySelector('#fnsku-font-size').value),
-        sku: parseInt(dialog.querySelector('#sku-font-size').value),
-        title: parseInt(dialog.querySelector('#title-font-size').value)
-      }
-    };
+  async saveConfigurationSettings(dialog) {
+    try {
+      const templateId = dialog.querySelector('#template-select').value;
+      const barcodeFormat = dialog.querySelector('#barcode-format').value;
 
-    // Update custom template if needed
-    if (settings.template === 'custom') {
-      const customTemplate = {
-        width: settings.customWidth,
-        height: settings.customHeight,
-        orientation: settings.customWidth > settings.customHeight ? 'landscape' : 'portrait'
+      const contentInclusion = {
+        barcode: dialog.querySelector('#include-barcode').checked,
+        fnsku: dialog.querySelector('#include-fnsku').checked,
+        sku: dialog.querySelector('#include-sku').checked,
+        title: dialog.querySelector('#include-title').checked,
+        images: dialog.querySelector('#include-image').checked
       };
-      this.pdfGenerator.updateCustomTemplate(customTemplate);
-    }
 
-    this.settings = settings;
-    this.saveSettings();
-    this.showNotification('Settings saved successfully', 'success');
+      const globalSettings = {
+        barcodeFormat: barcodeFormat,
+        autoExtract: dialog.querySelector('#auto-extract').checked,
+        autoOpenTabs: dialog.querySelector('#auto-open-tabs').checked,
+        debugMode: dialog.querySelector('#debug-mode').checked
+      };
+
+      // Update settings through SettingsManager
+      if (this.settingsManager) {
+        await this.settingsManager.setSelectedTemplateId(templateId);
+        await this.settingsManager.updateGlobalSettings(globalSettings);
+      }
+
+      // Update template content inclusion if it's a user template
+      if (this.templateManager && templateId.startsWith('user_')) {
+        const template = await this.templateManager.getTemplate(templateId);
+        if (template && template.userCreated) {
+          await this.templateManager.updateTemplate(templateId, {
+            ...template,
+            contentInclusion: contentInclusion
+          });
+        }
+      }
+
+      this.showNotification('Settings saved successfully', 'success');
+    } catch (error) {
+      console.error('Failed to save configuration settings:', error);
+      this.showNotification('Failed to save settings', 'error');
+    }
   }
 
   /**
@@ -497,11 +527,16 @@ class UIController {
    */
   async loadSettings() {
     try {
-      const response = await chrome.runtime.sendMessage({ action: 'getSettings' });
-      if (response.success) {
-        this.settings = response.data.labelSettings || {};
+      if (this.settingsManager) {
+        this.settings = await this.settingsManager.getSettings();
       } else {
-        this.settings = {};
+        // Fallback to background script
+        const response = await chrome.runtime.sendMessage({ action: 'getSettings' });
+        if (response.success) {
+          this.settings = response.data || {};
+        } else {
+          this.settings = {};
+        }
       }
     } catch (error) {
       console.warn('Failed to load settings:', error);
@@ -510,19 +545,49 @@ class UIController {
   }
 
   /**
-   * Save settings to Chrome storage
+   * Get current settings
+   * @returns {Object} Current settings
    */
-  async saveSettings() {
+  async getCurrentSettings() {
+    if (this.settingsManager) {
+      return await this.settingsManager.getSettings();
+    }
+    return this.settings;
+  }
+
+  /**
+   * Get selected template
+   * @returns {Object|null} Selected template
+   */
+  async getSelectedTemplate() {
+    if (this.settingsManager && this.templateManager) {
+      const templateId = await this.settingsManager.getSelectedTemplateId();
+      return await this.templateManager.getTemplate(templateId);
+    }
+    return null;
+  }
+
+  /**
+   * Get available templates
+   * @returns {Array} Available templates
+   */
+  async getAvailableTemplates() {
+    if (this.templateManager) {
+      return await this.templateManager.getAllTemplates();
+    }
+    return [];
+  }
+
+  /**
+   * Handle settings update from background script
+   * @param {Object} settings - Updated settings
+   */
+  async handleSettingsUpdate(settings) {
     try {
-      const response = await chrome.runtime.sendMessage({
-        action: 'saveSettings',
-        settings: { labelSettings: this.settings }
-      });
-      if (!response.success) {
-        throw new Error('Failed to save settings');
-      }
+      await this.loadSettings();
+      console.log('UIController: Settings updated from background');
     } catch (error) {
-      console.warn('Failed to save settings:', error);
+      console.error('Failed to handle settings update:', error);
     }
   }
 

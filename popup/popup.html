@@ -50,6 +50,15 @@
           <form id="manual-entry-form" class="compact-form">
             <div class="form-row">
               <div class="form-group">
+                <label for="manual-template">Template Override</label>
+                <select id="manual-template" class="form-input">
+                  <option value="">Use Global Template</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
                 <label for="manual-sku">SKU *</label>
                 <input type="text" id="manual-sku" class="form-input" placeholder="e.g., 2xArmyFBA" required>
               </div>
@@ -89,100 +98,140 @@
       <!-- Settings Tab -->
       <div id="settings-tab" class="tab-content">
         <div class="settings-section">
-          <div class="setting-group">
-            <label for="default-template">Template</label>
-            <select id="default-template" class="setting-input">
-              <option value="thermal_57x32">Thermal 57x32mm</option>
-              <option value="thermal_57x32_minimal">Thermal 57x32mm (Minimal)</option>
-              <option value="shipping_4x6">Shipping 4"x6"</option>
-              <option value="custom">Custom Size</option>
-            </select>
-          </div>
 
-          <div class="setting-group">
-            <label for="default-barcode">Barcode</label>
-            <select id="default-barcode" class="setting-input">
-              <option value="CODE128">CODE128</option>
-              <option value="CODE39">CODE39</option>
-              <option value="EAN13">EAN13</option>
-            </select>
-          </div>
+          <!-- Label Generation Section -->
+          <div class="settings-group">
+            <h3 class="group-title">Label Generation</h3>
 
-          <div class="setting-group">
-            <label>Preview</label>
-            <div id="label-preview" class="label-preview">
-              <div class="preview-loading">Loading preview...</div>
+            <div class="setting-group">
+              <label>Template</label>
+              <div class="template-selector">
+                <div class="hybrid-selector">
+                  <input type="text" id="template-name-input" class="setting-input template-name-input"
+                    placeholder="Template name">
+                  <button id="template-dropdown-btn" class="template-dropdown-btn" title="Select Template">▼</button>
+                  <div id="template-dropdown" class="template-dropdown-menu" style="display: none;">
+                    <!-- Templates will be populated here -->
+                  </div>
+                </div>
+                <button id="create-template-btn" class="template-btn" title="Create New Template">+</button>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <div class="dimension-controls">
+                <div class="dimension-row">
+                  <div class="dimension-input-group">
+                    <label for="template-width">Width:</label>
+                    <input type="number" id="template-width" class="setting-input dimension-input" min="10" max="500"
+                      step="0.1" value="57">
+                  </div>
+                  <div class="dimension-input-group">
+                    <label for="template-height">Height:</label>
+                    <input type="number" id="template-height" class="setting-input dimension-input" min="10" max="500"
+                      step="0.1" value="32">
+                  </div>
+                  <div class="dimension-input-group">
+                    <label for="template-units">Units:</label>
+                    <select id="template-units" class="setting-input dimension-input">
+                      <option value="mm">mm</option>
+                      <option value="in">inches</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <div id="label-preview" class="label-preview" style="margin-top: 8px;">
+                <div class="preview-loading">Loading preview...</div>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <label for="default-barcode">Barcode Format</label>
+              <select id="default-barcode" class="setting-input">
+                <option value="CODE128">CODE128</option>
+                <option value="CODE39">CODE39</option>
+                <option value="EAN13">EAN13</option>
+              </select>
+            </div>
+
+            <div class="setting-group">
+              <label>Font Sizes</label>
+              <div class="font-size-controls">
+                <div class="font-size-row">
+                  <label for="fnsku-font-size">FNSKU:</label>
+                  <input type="number" id="fnsku-font-size" class="setting-input font-size-input" min="4" max="20"
+                    value="8">
+                </div>
+                <div class="font-size-row">
+                  <label for="sku-font-size">SKU:</label>
+                  <input type="number" id="sku-font-size" class="setting-input font-size-input" min="4" max="20"
+                    value="11">
+                </div>
+                <div class="font-size-row">
+                  <label for="title-font-size">Title:</label>
+                  <input type="number" id="title-font-size" class="setting-input font-size-input" min="4" max="20"
+                    value="6">
+                </div>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <label>Content</label>
+              <div class="content-options">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="include-barcode" checked>
+                  <span class="checkbox-text">Barcode</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="include-fnsku" checked>
+                  <span class="checkbox-text">FNSKU</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="include-sku" checked>
+                  <span class="checkbox-text">SKU</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="include-title" checked>
+                  <span class="checkbox-text">Title</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="default-include-images">
+                  <span class="checkbox-text">Images</span>
+                </label>
+              </div>
             </div>
           </div>
 
-          <div class="setting-group">
-            <label>Font Sizes</label>
-            <div class="font-size-controls">
-              <div class="font-size-row">
-                <label for="fnsku-font-size">FNSKU:</label>
-                <input type="number" id="fnsku-font-size" class="setting-input font-size-input" min="4" max="20"
-                  value="8">
-              </div>
-              <div class="font-size-row">
-                <label for="sku-font-size">SKU:</label>
-                <input type="number" id="sku-font-size" class="setting-input font-size-input" min="4" max="20"
-                  value="11">
-              </div>
-              <div class="font-size-row">
-                <label for="title-font-size">Title:</label>
-                <input type="number" id="title-font-size" class="setting-input font-size-input" min="4" max="20"
-                  value="6">
-              </div>
-            </div>
-          </div>
+          <!-- App Behavior Section -->
+          <div class="settings-group">
+            <h3 class="group-title">App Behavior</h3>
 
-          <div class="setting-group">
-            <label>Content Options</label>
-            <div class="content-options">
-              <label class="checkbox-label">
-                <input type="checkbox" id="include-barcode" checked>
-                <span class="checkbox-text">Include barcode</span>
-              </label>
-              <label class="checkbox-label">
-                <input type="checkbox" id="include-fnsku" checked>
-                <span class="checkbox-text">Include FNSKU</span>
-              </label>
-              <label class="checkbox-label">
-                <input type="checkbox" id="include-sku" checked>
-                <span class="checkbox-text">Include SKU</span>
-              </label>
-              <label class="checkbox-label">
-                <input type="checkbox" id="include-title" checked>
-                <span class="checkbox-text">Include title</span>
-              </label>
-              <label class="checkbox-label">
-                <input type="checkbox" id="default-include-images">
-                <span class="checkbox-text">Include product images</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="setting-group">
-            <label>Extension Options</label>
-            <div class="extension-options">
-              <label class="checkbox-label">
-                <input type="checkbox" id="auto-extract">
-                <span class="checkbox-text">Auto-extract on page load</span>
-              </label>
-              <label class="checkbox-label">
-                <input type="checkbox" id="auto-open-tabs">
-                <span class="checkbox-text">Auto-open tabs</span>
-              </label>
-              <label class="checkbox-label">
-                <input type="checkbox" id="debug-mode">
-                <span class="checkbox-text">Debug mode</span>
-              </label>
+            <div class="setting-group">
+              <div class="extension-options">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="auto-extract">
+                  <span class="checkbox-text">Auto-extract on page load</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="auto-open-tabs">
+                  <span class="checkbox-text">Auto-open tabs</span>
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" id="debug-mode">
+                  <span class="checkbox-text">Debug mode</span>
+                </label>
+              </div>
             </div>
           </div>
 
           <div class="settings-actions">
             <button id="reset-settings" class="secondary-btn">Reset</button>
-            <button id="save-settings" class="primary-btn">Save</button>
+            <div class="auto-save-indicator" id="auto-save-indicator" style="display: none;">
+              <span class="saving-text">Saving...</span>
+            </div>
           </div>
         </div>
       </div>
@@ -192,7 +241,10 @@
 
   <script src="../lib/jspdf.umd.min.js"></script>
   <script src="../lib/jsbarcode.all.min.js"></script>
+  <script src="../content/template-manager.js"></script>
+  <script src="../content/settings-manager.js"></script>
   <script src="../content/pdf-generator.js"></script>
+  <script src="template-editor.js"></script>
   <script src="popup.js"></script>
 </body>
 

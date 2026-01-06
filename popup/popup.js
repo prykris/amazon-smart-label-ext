@@ -1,403 +1,326 @@
-/**
- * Popup Interface Controller
- * Handles popup UI interactions and communication with background script
- */
-
 class PopupController {
   constructor() {
-    this.currentSettings = {};
-    this.extensionStatus = {};
-    this.downloadHistory = [];
+    this.templateManager = null;
+    this.settingsManager = null;
     this.pdfGenerator = null;
+    this.currentTab = 'downloads'; // Default, will be overridden by saved preference
+    this.autoSaveTimeout = null;
+    this.templateEditor = null;
+    this.currentSettings = {};
+    this.downloadHistory = [];
+    this.saveTimeout = null;
+    this.saveDelay = 500;
+    this.dimensionChangeTimeout = null;
+    this.nameChangeTimeout = null;
+
     this.init();
   }
 
-  /**
-   * Initialize popup interface
-   */
   async init() {
     try {
-      // Wait for PDF generator to be available
-      await this.waitForPDFGenerator();
+      // Initialize services
+      this.templateManager = new TemplateManager();
+      this.settingsManager = new SettingsManager();
+      this.pdfGenerator = new PDFLabelGenerator(this.templateManager);
 
-      // Initialize PDF generator
-      this.pdfGenerator = new PDFLabelGenerator();
+      await this.templateManager.init();
+      await this.settingsManager.init();
 
-      // Load initial data
-      await this.loadExtensionStatus();
-      await this.loadCurrentSettings();
-      await this.loadDownloadHistory();
+      // Initialize template editor
+      this.templateEditor = new TemplateEditor(this.templateManager, this.settingsManager);
 
-      // Setup event listeners
       this.setupEventListeners();
+      this.setupTabSwitching();
+      await this.loadSettings();
+      await this.restoreLastSelectedTab(); // Restore saved tab preference
+      await this.loadTemplates();
+      await this.loadDownloadHistory();
+      this.updatePreview();
 
-      // Initialize tabs
-      this.initializeTabs();
-
-      // Update UI
-      this.updateUI();
-
-      // Setup settings tooltip
-      this.setupSettingsTooltip();
-
+      console.log('PopupController initialized successfully');
     } catch (error) {
-      console.error('Failed to initialize popup:', error);
-      this.showError('Failed to load extension data');
+      console.error('Failed to initialize PopupController:', error);
+      this.showError('Failed to initialize extension');
     }
   }
 
   /**
-   * Wait for PDF generator to be available
+   * Setup event listeners
    */
-  async waitForPDFGenerator() {
-    return new Promise((resolve, reject) => {
-      const checkGenerator = () => {
-        if (window.PDFLabelGenerator && window.jspdf && window.JsBarcode) {
-          resolve();
-        } else {
-          setTimeout(checkGenerator, 100);
-        }
-      };
+  setupEventListeners() {
+    // Manual entry form
+    const generateBtn = document.getElementById('generate-manual-label');
+    const previewBtn = document.getElementById('preview-manual-label');
+    const clearBtn = document.getElementById('clear-manual-form');
+    const sampleBtn = document.getElementById('load-sample-data');
 
-      checkGenerator();
+    if (generateBtn) generateBtn.addEventListener('click', () => this.generateManualLabel());
+    if (previewBtn) previewBtn.addEventListener('click', () => this.previewManualLabel());
+    if (clearBtn) clearBtn.addEventListener('click', () => this.clearManualForm());
+    if (sampleBtn) sampleBtn.addEventListener('click', () => this.loadSampleData());
 
-      // Timeout after 10 seconds
-      setTimeout(() => {
-        if (!window.PDFLabelGenerator) {
-          reject(new Error('PDF generator failed to load'));
-        }
-      }, 10000);
+    // Settings form - auto-save on changes
+    const settingsForm = document.getElementById('settings-form');
+    if (settingsForm) {
+      settingsForm.addEventListener('change', () => this.autoSaveSettings());
+      settingsForm.addEventListener('input', () => this.autoSaveSettings());
+    }
+
+    // Hybrid template selector event handlers
+    this.setupHybridTemplateSelector();
+
+    // Dimension controls event handlers
+    const templateWidth = document.getElementById('template-width');
+    const templateHeight = document.getElementById('template-height');
+    const templateUnits = document.getElementById('template-units');
+    const templateNameInput = document.getElementById('template-name-input');
+
+    if (templateWidth) templateWidth.addEventListener('input', () => this.debouncedDimensionChange());
+    if (templateHeight) templateHeight.addEventListener('input', () => this.debouncedDimensionChange());
+    if (templateUnits) templateUnits.addEventListener('change', () => this.onDimensionChange());
+    if (templateNameInput) templateNameInput.addEventListener('input', () => this.debouncedTemplateNameChange());
+
+    // Template management buttons
+    const createTemplateBtn = document.getElementById('create-template-btn');
+
+    if (createTemplateBtn) {
+      createTemplateBtn.addEventListener('click', () => this.createSimpleTemplate());
+    }
+
+    // Reset settings button
+    const resetBtn = document.getElementById('reset-settings');
+    if (resetBtn) resetBtn.addEventListener('click', () => this.resetSettings());
+
+    // Downloads management
+    const clearHistoryBtn = document.getElementById('clear-history');
+    if (clearHistoryBtn) clearHistoryBtn.addEventListener('click', () => this.clearDownloadHistory());
+
+    // Help and support buttons
+    const helpBtn = document.getElementById('help-guide');
+    const refreshBtn = document.getElementById('refresh-page');
+    const reportBtn = document.getElementById('report-issue');
+    const privacyBtn = document.getElementById('privacy-policy');
+    const supportBtn = document.getElementById('support');
+    const feedbackBtn = document.getElementById('feedback');
+
+    if (helpBtn) helpBtn.addEventListener('click', () => this.openHelpGuide());
+    if (refreshBtn) refreshBtn.addEventListener('click', () => this.refreshCurrentPage());
+    if (reportBtn) reportBtn.addEventListener('click', () => this.reportIssue());
+    if (privacyBtn) privacyBtn.addEventListener('click', () => this.openPrivacyPolicy());
+    if (supportBtn) supportBtn.addEventListener('click', () => this.openSupport());
+    if (feedbackBtn) feedbackBtn.addEventListener('click', () => this.openFeedback());
+
+    // Listen for template editor events
+    document.addEventListener('templateSaved', async () => {
+      await this.loadTemplates();
+      await this.loadSettings(); // Reload settings to get the new selected template
+      await this.populateSettingsPanel(); // Refresh the settings panel
+      await this.updatePreview();
+    });
+
+    document.addEventListener('templateDeleted', async () => {
+      await this.loadTemplates();
+      await this.loadSettings(); // Reload settings to get the updated selected template
+      await this.populateSettingsPanel(); // Refresh the settings panel
+      await this.updatePreview();
     });
   }
 
   /**
-   * Initialize tab functionality
+   * Setup tab switching functionality
    */
-  initializeTabs() {
+  setupTabSwitching() {
     const tabButtons = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
 
     tabButtons.forEach(button => {
       button.addEventListener('click', () => {
-        const targetTab = button.getAttribute('data-tab');
+        const targetTab = button.dataset.tab;
 
-        // Remove active class from all tabs and contents
+        // Update active tab button
         tabButtons.forEach(btn => btn.classList.remove('active'));
-        tabContents.forEach(content => content.classList.remove('active'));
-
-        // Add active class to clicked tab and corresponding content
         button.classList.add('active');
-        document.getElementById(`${targetTab}-tab`).classList.add('active');
+
+        // Update active tab content
+        tabContents.forEach(content => {
+          content.classList.remove('active');
+          if (content.id === `${targetTab}-tab`) {
+            content.classList.add('active');
+          }
+        });
+
+        this.currentTab = targetTab;
+
+        // Save the selected tab preference
+        this.saveSelectedTab(targetTab);
+
+        // Update UI based on active tab
+        if (targetTab === 'settings') {
+          this.populateSettingsPanel();
+          this.updatePreview();
+        } else if (targetTab === 'manual') {
+          this.updateManualTemplateSelector();
+        }
       });
     });
   }
 
   /**
-   * Setup event listeners for popup elements
+   * Load settings from SettingsManager
    */
-  setupEventListeners() {
-    // Toggle extension
-    document.getElementById('toggle-extension').addEventListener('click', () => {
-      this.toggleExtension();
-    });
-
-    // Clear download history
-    document.getElementById('clear-history').addEventListener('click', () => {
-      this.clearDownloadHistory();
-    });
-
-    // Manual entry form
-    document.getElementById('manual-entry-form').addEventListener('submit', (e) => {
-      e.preventDefault();
-      this.generateManualLabel();
-    });
-
-    document.getElementById('clear-form').addEventListener('click', () => {
-      this.clearManualForm();
-    });
-
-    document.getElementById('load-sample').addEventListener('click', () => {
-      this.loadSampleData();
-    });
-
-    // Settings actions
-    document.getElementById('save-settings').addEventListener('click', () => {
-      this.saveSettings();
-    });
-
-    document.getElementById('reset-settings').addEventListener('click', () => {
-      this.resetSettings();
-    });
-
-    // Settings change listeners for preview update
-    document.getElementById('default-template').addEventListener('change', () => {
-      this.updateLabelPreview();
-    });
-
-    document.getElementById('default-barcode').addEventListener('change', () => {
-      this.updateLabelPreview();
-    });
-
-    // Font size change listeners
-    document.getElementById('fnsku-font-size').addEventListener('input', () => {
-      this.updateLabelPreview();
-    });
-
-    document.getElementById('sku-font-size').addEventListener('input', () => {
-      this.updateLabelPreview();
-    });
-
-    document.getElementById('title-font-size').addEventListener('input', () => {
-      this.updateLabelPreview();
-    });
-
-    // Content inclusion change listeners
-    document.getElementById('include-barcode').addEventListener('change', () => {
-      this.updateLabelPreview();
-    });
-
-    document.getElementById('include-fnsku').addEventListener('change', () => {
-      this.updateLabelPreview();
-    });
-
-    document.getElementById('include-sku').addEventListener('change', () => {
-      this.updateLabelPreview();
-    });
-
-    document.getElementById('include-title').addEventListener('change', () => {
-      this.updateLabelPreview();
-    });
-
-    document.getElementById('default-barcode').addEventListener('change', () => {
-      this.updateLabelPreview();
-    });
-  }
-
-  /**
-   * Load extension status from background script
-   */
-  async loadExtensionStatus() {
+  async loadSettings() {
     try {
-      const response = await chrome.runtime.sendMessage({ action: 'getExtensionStatus' });
-      if (response.success) {
-        this.extensionStatus = response.data;
-      }
-    } catch (error) {
-      console.error('Failed to load extension status:', error);
-    }
-  }
-
-  /**
-   * Load current settings from background script
-   */
-  async loadCurrentSettings() {
-    try {
-      const response = await chrome.runtime.sendMessage({ action: 'getSettings' });
-      if (response.success) {
-        this.currentSettings = response.data;
-      }
+      this.currentSettings = await this.settingsManager.getSettings();
+      console.log('Loaded settings:', this.currentSettings);
     } catch (error) {
       console.error('Failed to load settings:', error);
+      this.currentSettings = {};
     }
   }
 
   /**
-   * Update UI elements with current data
+   * Load templates from TemplateManager
    */
-  updateUI() {
-    // Update extension status
-    const toggleButton = document.getElementById('toggle-extension');
-
-    if (toggleButton) {
-      const icon = toggleButton.querySelector('.toggle-icon');
-      if (icon) {
-        icon.textContent = this.extensionStatus.enabled ? '⏸️' : '▶️';
-      }
-      toggleButton.title = this.extensionStatus.enabled ? 'Pause Extension' : 'Resume Extension';
-      toggleButton.classList.toggle('disabled', !this.extensionStatus.enabled);
-    }
-
-    // Update downloads count
-    this.updateDownloadsCount();
-
-    // Populate settings panel
-    this.populateSettingsPanel();
-
-    // Update settings tooltip
-    this.updateSettingsTooltip();
-
-    // Update label preview
-    this.updateLabelPreview();
-  }
-
-  /**
-   * Get human-readable template name
-   * @param {string} templateId - Template ID
-   * @returns {string} Human-readable name
-   */
-  getTemplateName(templateId) {
-    const templateNames = {
-      'thermal_57x32': 'Thermal 57x32mm',
-      'thermal_57x32_minimal': 'Thermal 57x32mm (Minimal)',
-      'shipping_4x6': 'Shipping 4"x6"',
-      'custom': 'Custom Size'
-    };
-    return templateNames[templateId] || 'Unknown';
-  }
-
-  /**
-   * Check if current page is compatible with extension
-   */
-  async checkPageCompatibility() {
+  async loadTemplates() {
     try {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const currentTab = tabs[0];
-
-      const pageStatusElement = document.getElementById('page-status');
-
-      if (currentTab && currentTab.url) {
-        const isCompatible = /https:\/\/sellercentral(-europe)?\.amazon\.[^\/]+/.test(currentTab.url);
-
-        if (isCompatible) {
-          pageStatusElement.textContent = 'Compatible';
-          pageStatusElement.className = 'status-value compatible';
-        } else {
-          pageStatusElement.textContent = 'Not Compatible';
-          pageStatusElement.className = 'status-value incompatible';
-        }
-      } else {
-        pageStatusElement.textContent = 'Unknown';
-        pageStatusElement.className = 'status-value';
-      }
+      await this.updateManualTemplateSelector();
     } catch (error) {
-      console.error('Failed to check page compatibility:', error);
-      document.getElementById('page-status').textContent = 'Error';
+      console.error('Failed to load templates:', error);
     }
   }
 
   /**
-   * Toggle extension enabled/disabled state
+   * Restore the last selected tab from settings
    */
-  async toggleExtension() {
+  async restoreLastSelectedTab() {
     try {
-      const toggleButton = document.getElementById('toggle-extension');
-      toggleButton.disabled = true;
+      const globalSettings = this.currentSettings.globalSettings || {};
+      const lastSelectedTab = globalSettings.lastSelectedTab || 'downloads';
 
-      const response = await chrome.runtime.sendMessage({ action: 'toggleExtension' });
+      // Set the current tab
+      this.currentTab = lastSelectedTab;
 
-      if (response.success) {
-        this.extensionStatus.enabled = response.enabled;
-        this.updateUI();
-      } else {
-        this.showError('Failed to toggle extension');
-      }
+      // Update the UI to reflect the restored tab
+      this.activateTab(lastSelectedTab);
+
+      console.log('Restored last selected tab:', lastSelectedTab);
     } catch (error) {
-      console.error('Failed to toggle extension:', error);
-      this.showError('Failed to toggle extension');
-    } finally {
-      document.getElementById('toggle-extension').disabled = false;
+      console.error('Failed to restore last selected tab:', error);
+      // Fallback to downloads tab
+      this.currentTab = 'downloads';
+      this.activateTab('downloads');
     }
   }
 
   /**
-   * Switch to manual entry tab
+   * Save the selected tab preference
    */
-  switchToManualTab() {
-    // Remove active from all tabs
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-
-    // Activate manual tab
-    document.querySelector('[data-tab="manual"]').classList.add('active');
-    document.getElementById('manual-tab').classList.add('active');
+  async saveSelectedTab(tabName) {
+    try {
+      await this.settingsManager.updateGlobalSettings({
+        lastSelectedTab: tabName
+      });
+      console.log('Saved selected tab:', tabName);
+    } catch (error) {
+      console.error('Failed to save selected tab:', error);
+    }
   }
 
   /**
-   * Generate label from manual entry form
+   * Activate a specific tab in the UI
+   */
+  activateTab(tabName) {
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    // Update active tab button
+    tabButtons.forEach(btn => {
+      btn.classList.remove('active');
+      if (btn.dataset.tab === tabName) {
+        btn.classList.add('active');
+      }
+    });
+
+    // Update active tab content
+    tabContents.forEach(content => {
+      content.classList.remove('active');
+      if (content.id === `${tabName}-tab`) {
+        content.classList.add('active');
+      }
+    });
+
+    // Update UI based on active tab
+    if (tabName === 'settings') {
+      this.populateSettingsPanel();
+      this.updatePreview();
+    } else if (tabName === 'manual') {
+      this.updateManualTemplateSelector();
+    }
+  }
+
+  /**
+   * Update preview based on current settings
+   */
+  async updatePreview() {
+    if (this.currentTab === 'settings') {
+      await this.updateLabelPreview();
+    }
+  }
+
+  /**
+   * Generate manual label
    */
   async generateManualLabel() {
     try {
-      const generateBtn = document.getElementById('generate-manual');
-      generateBtn.classList.add('loading');
-      generateBtn.disabled = true;
-
-      // Collect form data
       const formData = this.collectManualFormData();
 
-      // Validate required fields
       if (!this.validateManualForm(formData)) {
         return;
       }
 
-      // Generate PDF directly in popup
-      await this.generatePDFDirectly(formData);
+      // Get template to use (local override or global)
+      const manualTemplateSelect = document.getElementById('manual-template-select');
+      let templateId;
 
-    } catch (error) {
-      console.error('Manual label generation error:', error);
-      this.showError('Failed to generate label');
-    } finally {
-      const generateBtn = document.getElementById('generate-manual');
-      generateBtn.classList.remove('loading');
-      generateBtn.disabled = false;
-    }
-  }
-
-  /**
-   * Generate PDF using the proper PDF generator
-   */
-  async generatePDFDirectly(data) {
-    try {
-      if (!this.pdfGenerator) {
-        throw new Error('PDF generator not initialized');
+      if (manualTemplateSelect && manualTemplateSelect.value) {
+        templateId = manualTemplateSelect.value;
+      } else {
+        templateId = await this.settingsManager.getSelectedTemplateId();
       }
 
-      // Get current settings for PDF generation
-      const labelSettings = this.currentSettings.labelSettings || {};
-      const settings = {
-        template: labelSettings.template || 'thermal_57x32',
-        barcodeFormat: labelSettings.barcodeFormat || 'CODE128',
-        includeImage: labelSettings.includeImage || false,
-        includeBarcode: labelSettings.includeBarcode !== false,
-        includeFnsku: labelSettings.includeFnsku !== false,
-        includeSku: labelSettings.includeSku !== false,
-        includeTitle: labelSettings.includeTitle !== false,
-        fontSize: labelSettings.fontSize || {
-          fnsku: 8,
-          sku: 11,
-          title: 6
-        }
-      };
-
-      // Prepare product data in the format expected by PDFLabelGenerator
-      const productData = {
-        sku: data.sku,
-        fnsku: data.fnsku,
-        asin: data.asin,
-        title: data.title
-      };
-
-      // Generate PDF using the proper generator
-      const doc = await this.pdfGenerator.generateLabels(productData, data.quantity, settings);
+      // Generate PDF using the unified system
+      const pdfBlob = await this.pdfGenerator.generateLabel({
+        sku: formData.sku,
+        fnsku: formData.fnsku,
+        asin: formData.asin,
+        title: formData.title
+      }, templateId, formData.quantity);
 
       // Download the PDF
-      const filename = `${data.sku}_label.pdf`;
-      this.pdfGenerator.savePDF(doc, filename);
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${formData.sku}_label.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
       // Add to download history
-      this.addToDownloadHistory({
-        sku: data.sku,
-        fnsku: data.fnsku,
-        asin: data.asin,
-        title: data.title,
-        quantity: data.quantity,
+      await this.addToDownloadHistory({
+        sku: formData.sku,
+        fnsku: formData.fnsku,
+        asin: formData.asin,
+        title: formData.title,
+        quantity: formData.quantity,
         timestamp: new Date().toISOString()
       });
 
-      this.showSuccess(`✅ Generated ${data.quantity} label(s) for ${data.sku}`);
+      this.showSuccess(`✅ Generated ${formData.quantity} label(s) for ${formData.sku}`);
 
     } catch (error) {
       console.error('PDF generation error:', error);
-      throw error;
+      this.showError('Failed to generate label: ' + error.message);
     }
   }
 
@@ -538,67 +461,584 @@ class PopupController {
   /**
    * Populate settings panel with current values
    */
-  populateSettingsPanel() {
-    const labelSettings = this.currentSettings.labelSettings || {};
+  async populateSettingsPanel() {
+    try {
+      // Update template UI
+      await this.updateTemplateUI();
 
-    // Default template
-    const templateSelect = document.getElementById('default-template');
-    if (templateSelect) {
-      templateSelect.value = labelSettings.template || 'thermal_57x32';
+      // Populate the content
+      await this.populateSettingsPanelContent();
+
+    } catch (error) {
+      console.error('Failed to populate settings panel:', error);
+    }
+  }
+
+  /**
+   * Populate settings panel content without updating template dropdown
+   */
+  async populateSettingsPanelContent() {
+    try {
+      // Get current settings
+      const selectedTemplateId = this.currentSettings.selectedTemplateId || 'thermal_57x32';
+      const globalSettings = this.currentSettings.globalSettings || {};
+
+      // Default barcode format
+      const barcodeSelect = document.getElementById('default-barcode');
+      if (barcodeSelect) {
+        barcodeSelect.value = globalSettings.barcodeFormat || 'CODE128';
+      }
+
+      // App behavior checkboxes
+      const autoExtractCheckbox = document.getElementById('auto-extract');
+      const autoOpenTabsCheckbox = document.getElementById('auto-open-tabs');
+      const debugModeCheckbox = document.getElementById('debug-mode');
+
+      if (autoExtractCheckbox) autoExtractCheckbox.checked = globalSettings.autoExtract !== false;
+      if (autoOpenTabsCheckbox) autoOpenTabsCheckbox.checked = globalSettings.autoOpenTabs || false;
+      if (debugModeCheckbox) debugModeCheckbox.checked = globalSettings.debugMode || false;
+
+      // Get selected template for content inclusion settings
+      const selectedTemplate = await this.getSelectedTemplate();
+      const contentInclusion = selectedTemplate?.contentInclusion || {};
+
+      // Content inclusion options
+      const includeBarcodeCheckbox = document.getElementById('include-barcode');
+      const includeFnskuCheckbox = document.getElementById('include-fnsku');
+      const includeSkuCheckbox = document.getElementById('include-sku');
+      const includeTitleCheckbox = document.getElementById('include-title');
+      const includeImagesCheckbox = document.getElementById('default-include-images');
+
+      if (includeBarcodeCheckbox) includeBarcodeCheckbox.checked = contentInclusion.barcode !== false;
+      if (includeFnskuCheckbox) includeFnskuCheckbox.checked = contentInclusion.fnsku !== false;
+      if (includeSkuCheckbox) includeSkuCheckbox.checked = contentInclusion.sku !== false;
+      if (includeTitleCheckbox) includeTitleCheckbox.checked = contentInclusion.title !== false;
+      if (includeImagesCheckbox) includeImagesCheckbox.checked = contentInclusion.images || false;
+
+      // Font size inputs (from template or defaults)
+      const fnskuFontSize = document.getElementById('fnsku-font-size');
+      const skuFontSize = document.getElementById('sku-font-size');
+      const titleFontSize = document.getElementById('title-font-size');
+
+      if (fnskuFontSize) fnskuFontSize.value = selectedTemplate?.elements?.fnsku?.fontSize || 8;
+      if (skuFontSize) skuFontSize.value = selectedTemplate?.elements?.sku?.fontSize || 11;
+      if (titleFontSize) titleFontSize.value = selectedTemplate?.elements?.title?.fontSize || 6;
+
+    } catch (error) {
+      console.error('Failed to populate settings panel content:', error);
+    }
+  }
+
+  /**
+   * Setup hybrid template selector
+   */
+  setupHybridTemplateSelector() {
+    const dropdownBtn = document.getElementById('template-dropdown-btn');
+    const dropdown = document.getElementById('template-dropdown');
+
+    if (dropdownBtn && dropdown) {
+      dropdownBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleTemplateDropdown();
+      });
+
+      // Close dropdown when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.hybrid-selector')) {
+          dropdown.style.display = 'none';
+        }
+      });
+    }
+  }
+
+  /**
+   * Toggle template dropdown visibility
+   */
+  async toggleTemplateDropdown() {
+    const dropdown = document.getElementById('template-dropdown');
+    if (!dropdown) return;
+
+    if (dropdown.style.display === 'none' || !dropdown.style.display) {
+      await this.populateTemplateDropdown();
+      dropdown.style.display = 'block';
+    } else {
+      dropdown.style.display = 'none';
+    }
+  }
+
+  /**
+   * Populate template dropdown menu
+   */
+  async populateTemplateDropdown() {
+    try {
+      const dropdown = document.getElementById('template-dropdown');
+      if (!dropdown || !this.templateManager) return;
+
+      const templates = await this.templateManager.getAllTemplates();
+      const currentSelectedId = await this.settingsManager.getSelectedTemplateId();
+
+      // Clear existing items
+      dropdown.innerHTML = '';
+
+      // Add template items
+      templates.forEach(template => {
+        const item = document.createElement('div');
+        item.className = 'template-dropdown-item';
+        if (template.id === currentSelectedId) {
+          item.classList.add('selected');
+        }
+
+        item.textContent = template.displayName || template.name;
+        item.dataset.templateId = template.id;
+
+        item.addEventListener('click', () => {
+          this.selectTemplateFromDropdown(template.id);
+        });
+
+        dropdown.appendChild(item);
+      });
+
+    } catch (error) {
+      console.error('Failed to populate template dropdown:', error);
+    }
+  }
+
+  /**
+   * Select template from dropdown
+   */
+  async selectTemplateFromDropdown(templateId) {
+    try {
+      // Hide dropdown
+      const dropdown = document.getElementById('template-dropdown');
+      if (dropdown) dropdown.style.display = 'none';
+
+      // Update selected template
+      await this.settingsManager.setSelectedTemplateId(templateId);
+
+      // Update current settings cache
+      this.currentSettings = await this.settingsManager.getSettings();
+
+      // Update UI
+      await this.updateTemplateUI();
+      await this.updatePreview();
+
+      console.log('Template selected from dropdown:', templateId);
+    } catch (error) {
+      console.error('Failed to select template from dropdown:', error);
+      this.showError('Failed to select template');
+    }
+  }
+
+  /**
+   * Update template UI elements
+   */
+  async updateTemplateUI() {
+    try {
+      const selectedTemplate = await this.getSelectedTemplate();
+      if (!selectedTemplate) return;
+
+      // Update name display
+      await this.updateTemplateNameDisplay();
+
+      // Update dimension inputs
+      const widthInput = document.getElementById('template-width');
+      const heightInput = document.getElementById('template-height');
+      const unitsSelect = document.getElementById('template-units');
+
+      if (widthInput) widthInput.value = selectedTemplate.width || 57;
+      if (heightInput) heightInput.value = selectedTemplate.height || 32;
+      if (unitsSelect) unitsSelect.value = selectedTemplate.units || 'mm';
+
+      // Disable dimension editing for built-in templates
+      const isBuiltIn = !selectedTemplate.userCreated;
+      if (widthInput) widthInput.readOnly = isBuiltIn;
+      if (heightInput) heightInput.readOnly = isBuiltIn;
+      if (unitsSelect) unitsSelect.disabled = isBuiltIn;
+
+      // Update other settings
+      await this.populateSettingsPanelContent();
+
+    } catch (error) {
+      console.error('Failed to update template UI:', error);
+    }
+  }
+
+  /**
+   * Update manual entry template selector
+   */
+  async updateManualTemplateSelector() {
+    try {
+      const templateSelect = document.getElementById('manual-template-select');
+      if (!templateSelect || !this.templateManager) return;
+
+      const templates = await this.templateManager.getAllTemplates();
+
+      // Clear existing options
+      templateSelect.innerHTML = '';
+
+      // Add default option
+      const defaultOption = document.createElement('option');
+      defaultOption.value = '';
+      defaultOption.textContent = 'Use Global Template';
+      templateSelect.appendChild(defaultOption);
+
+      // Add template options
+      templates.forEach(template => {
+        const option = document.createElement('option');
+        option.value = template.id;
+        option.textContent = template.name;
+        if (template.userCreated) {
+          option.textContent += ' (Custom)';
+        }
+        templateSelect.appendChild(option);
+      });
+
+    } catch (error) {
+      console.error('Failed to update manual template selector:', error);
+    }
+  }
+
+  /**
+   * Get selected template
+   * @returns {Object|null} Selected template
+   */
+  async getSelectedTemplate() {
+    try {
+      if (this.settingsManager && this.templateManager) {
+        const templateId = await this.settingsManager.getSelectedTemplateId();
+        return await this.templateManager.getTemplate(templateId);
+      }
+      return null;
+    } catch (error) {
+      console.error('Failed to get selected template:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Handle dimension changes with debouncing for input fields
+   */
+  debouncedDimensionChange() {
+    // Clear existing timeout
+    if (this.dimensionChangeTimeout) {
+      clearTimeout(this.dimensionChangeTimeout);
     }
 
-    // Default barcode format
-    const barcodeSelect = document.getElementById('default-barcode');
-    if (barcodeSelect) {
-      barcodeSelect.value = labelSettings.barcodeFormat || 'CODE128';
+    // Set new timeout
+    this.dimensionChangeTimeout = setTimeout(() => {
+      this.onDimensionChange();
+    }, 300);
+  }
+
+  /**
+   * Handle dimension changes
+   */
+  async onDimensionChange() {
+    try {
+      const selectedTemplate = await this.getSelectedTemplate();
+      if (!selectedTemplate || !selectedTemplate.userCreated) return;
+
+      const widthInput = document.getElementById('template-width');
+      const heightInput = document.getElementById('template-height');
+      const unitsSelect = document.getElementById('template-units');
+
+      if (!widthInput || !heightInput || !unitsSelect) return;
+
+      const width = parseFloat(widthInput.value) || 0;
+      const height = parseFloat(heightInput.value) || 0;
+      const units = unitsSelect.value || 'mm';
+
+      // Validate dimensions
+      if (width <= 0 || height <= 0) return;
+
+      // Update template dimensions and regenerate elements
+      const updatedTemplate = {
+        ...selectedTemplate,
+        width,
+        height,
+        units,
+        orientation: width > height ? 'landscape' : 'portrait',
+        elements: this.generateBasicElements(width, height),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Save the updated template
+      await this.templateManager.updateTemplate(selectedTemplate.id, updatedTemplate);
+
+      // Update current settings cache
+      this.currentSettings = await this.settingsManager.getSettings();
+
+      // Update the name input to show new dimensions
+      await this.updateTemplateNameDisplay();
+
+      // Update preview
+      await this.updatePreview();
+
+      // Update template dropdown if open
+      const dropdown = document.getElementById('template-dropdown');
+      if (dropdown && dropdown.style.display !== 'none') {
+        await this.populateTemplateDropdown();
+      }
+
+      console.log('Template dimensions updated:', { width, height, units });
+
+    } catch (error) {
+      console.error('Failed to handle dimension change:', error);
+    }
+  }
+
+  /**
+   * Handle template name changes with debouncing
+   */
+  debouncedTemplateNameChange() {
+    // Clear existing timeout
+    if (this.nameChangeTimeout) {
+      clearTimeout(this.nameChangeTimeout);
     }
 
-    // Include images checkbox
-    const includeImagesCheckbox = document.getElementById('default-include-images');
-    if (includeImagesCheckbox) {
-      includeImagesCheckbox.checked = labelSettings.includeImage || false;
+    // Set new timeout
+    this.nameChangeTimeout = setTimeout(() => {
+      this.onTemplateNameChange();
+    }, 500);
+  }
+
+  /**
+   * Handle template name changes
+   */
+  async onTemplateNameChange() {
+    try {
+      const selectedTemplate = await this.getSelectedTemplate();
+      if (!selectedTemplate || !selectedTemplate.userCreated) return;
+
+      const nameInput = document.getElementById('template-name-input');
+      if (!nameInput) return;
+
+      const newBaseName = nameInput.value.trim();
+      if (!newBaseName) return;
+
+      // Update template base name
+      const updatedTemplate = {
+        ...selectedTemplate,
+        baseName: newBaseName,
+        name: newBaseName,
+        updatedAt: new Date().toISOString()
+      };
+
+      // Save the updated template
+      await this.templateManager.updateTemplate(selectedTemplate.id, updatedTemplate);
+
+      // Update template dropdown if open
+      const dropdown = document.getElementById('template-dropdown');
+      if (dropdown && dropdown.style.display !== 'none') {
+        await this.populateTemplateDropdown();
+      }
+
+      console.log('Template name updated:', newBaseName);
+
+    } catch (error) {
+      console.error('Failed to handle template name change:', error);
+    }
+  }
+
+  /**
+   * Update template name display with dimensions
+   */
+  async updateTemplateNameDisplay() {
+    try {
+      const selectedTemplate = await this.getSelectedTemplate();
+      if (!selectedTemplate) return;
+
+      const nameInput = document.getElementById('template-name-input');
+      if (!nameInput) return;
+
+      // Get or create dimensions overlay element
+      let dimensionsOverlay = document.getElementById('template-dimensions-overlay');
+      if (!dimensionsOverlay) {
+        dimensionsOverlay = document.createElement('div');
+        dimensionsOverlay.id = 'template-dimensions-overlay';
+        dimensionsOverlay.className = 'template-dimensions-overlay';
+
+        // Insert after the name input
+        const templateSelector = nameInput.closest('.template-selector');
+        if (templateSelector) {
+          templateSelector.appendChild(dimensionsOverlay);
+        }
+      }
+
+      // For built-in templates, show the dynamic name (read-only)
+      if (!selectedTemplate.userCreated) {
+        const dynamicName = this.templateManager.generateDynamicName(selectedTemplate);
+        nameInput.value = dynamicName;
+        nameInput.readOnly = true;
+        nameInput.title = 'Built-in template (read-only)';
+        dimensionsOverlay.style.display = 'none';
+        nameInput.placeholder = '';
+      } else {
+        // For user templates, show editable base name with visual dimensions indicator
+        const baseName = selectedTemplate.baseName || selectedTemplate.name || '';
+        const dimensionSuffix = `${selectedTemplate.width || 57}×${selectedTemplate.height || 32}${selectedTemplate.units || 'mm'}`;
+
+        nameInput.value = baseName;
+        nameInput.readOnly = false;
+        nameInput.title = `Template name (dimensions: ${dimensionSuffix})`;
+        nameInput.placeholder = 'Template name';
+
+        // Update dimensions overlay
+        dimensionsOverlay.textContent = dimensionSuffix;
+        dimensionsOverlay.style.display = 'block';
+      }
+
+    } catch (error) {
+      console.error('Failed to update template name display:', error);
+    }
+  }
+
+  /**
+   * Handle template selection change
+   */
+  async onTemplateSelectionChange() {
+    try {
+      const templateSelect = document.getElementById('template-select');
+      if (!templateSelect) return;
+
+      const selectedTemplateId = templateSelect.value;
+      const currentSelectedId = await this.settingsManager.getSelectedTemplateId();
+
+      // Only update if the selection actually changed
+      if (selectedTemplateId === currentSelectedId) return;
+
+      // Update the selected template in settings
+      await this.settingsManager.setSelectedTemplateId(selectedTemplateId);
+
+      // Update current settings cache
+      this.currentSettings = await this.settingsManager.getSettings();
+
+      // Refresh the settings panel to show template-specific settings (but don't update the dropdown again)
+      await this.populateSettingsPanelContent();
+
+      // Update the preview
+      await this.updatePreview();
+
+      console.log('Template selection changed to:', selectedTemplateId);
+    } catch (error) {
+      console.error('Failed to handle template selection change:', error);
+      this.showError('Failed to update template selection');
+    }
+  }
+
+  /**
+   * Auto-save settings with debounce
+   */
+  autoSaveSettings() {
+    // Clear existing timeout
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
     }
 
-    // Auto-open tabs checkbox
-    const autoOpenTabsCheckbox = document.getElementById('auto-open-tabs');
-    if (autoOpenTabsCheckbox) {
-      autoOpenTabsCheckbox.checked = labelSettings.autoOpenTabs || false;
+    // Set new timeout
+    this.saveTimeout = setTimeout(async () => {
+      try {
+        await this.saveSettingsToManager();
+        this.showSavingIndicator(false);
+      } catch (error) {
+        console.error('Auto-save failed:', error);
+        this.showError('Failed to save settings');
+      }
+    }, this.saveDelay);
+
+    // Show saving indicator
+    this.showSavingIndicator(true);
+  }
+
+  /**
+   * Save settings to SettingsManager
+   */
+  async saveSettingsToManager() {
+    try {
+      if (!this.settingsManager || !this.templateManager) return;
+
+      // Get form values
+      const templateId = document.getElementById('template-select')?.value || 'thermal_57x32';
+      const barcodeFormat = document.getElementById('default-barcode')?.value || 'CODE128';
+      const autoExtract = document.getElementById('auto-extract')?.checked !== false;
+      const autoOpenTabs = document.getElementById('auto-open-tabs')?.checked || false;
+      const debugMode = document.getElementById('debug-mode')?.checked || false;
+
+      // Update global settings
+      await this.settingsManager.setSelectedTemplateId(templateId);
+      await this.settingsManager.updateGlobalSettings({
+        barcodeFormat,
+        autoExtract,
+        autoOpenTabs,
+        debugMode
+      });
+
+      // Get the current template and update its settings if it's user-created
+      const currentTemplate = await this.templateManager.getTemplate(templateId);
+      if (currentTemplate && currentTemplate.userCreated) {
+        // Update template with current form values
+        const updatedTemplate = {
+          ...currentTemplate,
+          contentInclusion: {
+            barcode: document.getElementById('include-barcode')?.checked !== false,
+            fnsku: document.getElementById('include-fnsku')?.checked !== false,
+            sku: document.getElementById('include-sku')?.checked !== false,
+            title: document.getElementById('include-title')?.checked !== false,
+            images: document.getElementById('default-include-images')?.checked || false
+          }
+        };
+
+        // Update font sizes if the template has elements
+        if (updatedTemplate.elements) {
+          updatedTemplate.elements.forEach(element => {
+            if (element.type === 'text') {
+              if (element.content === 'fnsku') {
+                element.fontSize = parseInt(document.getElementById('fnsku-font-size')?.value) || element.fontSize;
+              } else if (element.content === 'sku') {
+                element.fontSize = parseInt(document.getElementById('sku-font-size')?.value) || element.fontSize;
+              } else if (element.content === 'title') {
+                element.fontSize = parseInt(document.getElementById('title-font-size')?.value) || element.fontSize;
+              }
+            }
+          });
+        }
+
+        // Save the updated template
+        await this.templateManager.updateTemplate(templateId, updatedTemplate);
+      }
+
+      // Update current settings cache
+      this.currentSettings = await this.settingsManager.getSettings();
+
+    } catch (error) {
+      console.error('Failed to save settings to manager:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Show/hide saving indicator
+   * @param {boolean} saving - Whether currently saving
+   */
+  showSavingIndicator(saving) {
+    const indicator = document.getElementById('auto-save-indicator');
+    if (indicator) {
+      if (saving) {
+        indicator.style.display = 'block';
+        indicator.querySelector('.saving-text').textContent = 'Saving...';
+      } else {
+        indicator.querySelector('.saving-text').textContent = 'Saved';
+        setTimeout(() => {
+          indicator.style.display = 'none';
+        }, 1000);
+      }
     }
 
-    // Debug mode checkbox
-    const debugModeCheckbox = document.getElementById('debug-mode');
-    if (debugModeCheckbox) {
-      debugModeCheckbox.checked = labelSettings.debugMode || false;
+    if (saving) {
+      console.log('Saving settings...');
+    } else {
+      console.log('Settings saved');
     }
-
-    // Auto-extract checkbox
-    const autoExtractCheckbox = document.getElementById('auto-extract');
-    if (autoExtractCheckbox) {
-      autoExtractCheckbox.checked = labelSettings.autoExtract !== false;
-    }
-
-    // Font size inputs
-    const fnskuFontSize = document.getElementById('fnsku-font-size');
-    const skuFontSize = document.getElementById('sku-font-size');
-    const titleFontSize = document.getElementById('title-font-size');
-
-    if (fnskuFontSize) fnskuFontSize.value = labelSettings.fontSize?.fnsku || 8;
-    if (skuFontSize) skuFontSize.value = labelSettings.fontSize?.sku || 11;
-    if (titleFontSize) titleFontSize.value = labelSettings.fontSize?.title || 6;
-
-    // Content inclusion options
-    const includeBarcodeCheckbox = document.getElementById('include-barcode');
-    const includeFnskuCheckbox = document.getElementById('include-fnsku');
-    const includeSkuCheckbox = document.getElementById('include-sku');
-    const includeTitleCheckbox = document.getElementById('include-title');
-
-    if (includeBarcodeCheckbox) includeBarcodeCheckbox.checked = labelSettings.includeBarcode !== false;
-    if (includeFnskuCheckbox) includeFnskuCheckbox.checked = labelSettings.includeFnsku !== false;
-    if (includeSkuCheckbox) includeSkuCheckbox.checked = labelSettings.includeSku !== false;
-    if (includeTitleCheckbox) includeTitleCheckbox.checked = labelSettings.includeTitle !== false;
-
-    // Update preview when settings change
-    this.updateLabelPreview();
   }
 
   /**
@@ -616,20 +1056,16 @@ class PopupController {
         return;
       }
 
-      // Get current settings
-      const labelSettings = this.currentSettings.labelSettings || {};
-      const template = document.getElementById('default-template')?.value || labelSettings.template || 'thermal_57x32';
-      const barcodeFormat = document.getElementById('default-barcode')?.value || labelSettings.barcodeFormat || 'CODE128';
+      // Get selected template ID
+      const templateSelect = document.getElementById('template-select');
+      const templateId = templateSelect?.value || await this.settingsManager.getSelectedTemplateId() || 'thermal_57x32';
+      const barcodeFormat = document.getElementById('default-barcode')?.value || 'CODE128';
 
-      // Sample data for preview
-      const sampleData = {
-        sku: 'SAMPLE-SKU',
-        fnsku: 'X002SAMPLE',
-        title: 'Sample Product Title for Preview'
-      };
+      // Get persistent sample data
+      const sampleData = await this.getSampleData();
 
-      // Get template info
-      const templateInfo = this.pdfGenerator.templates[template];
+      // Get template info using new template system
+      const templateInfo = await this.templateManager.getTemplate(templateId);
       if (!templateInfo) {
         previewContainer.innerHTML = '<div class="preview-error">Template not found</div>';
         return;
@@ -638,15 +1074,45 @@ class PopupController {
       // Generate barcode using the PDF generator's method
       const barcodeDataURL = await this.pdfGenerator.generateBarcode(sampleData.fnsku, barcodeFormat);
 
+      // Create preview wrapper with controls
+      const previewWrapper = document.createElement('div');
+      previewWrapper.className = 'preview-wrapper';
+      previewWrapper.style.cssText = 'position: relative;';
+
+      // Add control buttons
+      const controlsTop = document.createElement('div');
+      controlsTop.className = 'preview-controls-top';
+      controlsTop.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;';
+
+      // Edit button (left)
+      const editBtn = document.createElement('button');
+      editBtn.className = 'preview-edit-btn';
+      editBtn.textContent = 'Edit';
+      editBtn.style.cssText = 'padding: 4px 8px; font-size: 11px; border: 1px solid #007bff; background: white; color: #007bff; border-radius: 3px; cursor: pointer;';
+      editBtn.addEventListener('click', () => this.openSampleDataEditor());
+
+      // Download button (right)
+      const downloadBtn = document.createElement('button');
+      downloadBtn.className = 'preview-download-btn';
+      downloadBtn.textContent = 'Download';
+      downloadBtn.style.cssText = 'padding: 4px 8px; font-size: 11px; border: 1px solid #28a745; background: #28a745; color: white; border-radius: 3px; cursor: pointer;';
+      downloadBtn.addEventListener('click', () => this.downloadFromPreview());
+
+      controlsTop.appendChild(editBtn);
+      controlsTop.appendChild(downloadBtn);
+
       // Create preview content
       const previewContent = document.createElement('div');
       previewContent.className = 'preview-content';
 
       // Add template info
-      const templateInfo_div = document.createElement('div');
-      templateInfo_div.className = 'preview-template-info';
-      templateInfo_div.textContent = `${templateInfo.name} (${templateInfo.width}×${templateInfo.height}mm)`;
-      templateInfo_div.style.cssText = 'font-size: 11px; color: #666; margin-bottom: 8px; text-align: center;';
+      const templateInfoDiv = document.createElement('div');
+      templateInfoDiv.className = 'preview-template-info';
+      const width = templateInfo.width || 57;
+      const height = templateInfo.height || 32;
+      const units = templateInfo.units || 'mm';
+      templateInfoDiv.textContent = `${templateInfo.name} (${width}×${height}${units})`;
+      templateInfoDiv.style.cssText = 'font-size: 11px; color: #666; margin-bottom: 8px; text-align: center;';
 
       // Add barcode image
       const barcodeImg = document.createElement('img');
@@ -654,63 +1120,75 @@ class PopupController {
       barcodeImg.className = 'preview-barcode';
       barcodeImg.alt = 'Sample barcode';
 
-      // Get custom font sizes from settings
-      const customFontSizes = {
-        fnsku: parseInt(document.getElementById('fnsku-font-size')?.value) || labelSettings.fontSize?.fnsku || templateInfo.elements.fnsku?.fontSize || 8,
-        sku: parseInt(document.getElementById('sku-font-size')?.value) || labelSettings.fontSize?.sku || templateInfo.elements.sku?.fontSize || 11,
-        title: parseInt(document.getElementById('title-font-size')?.value) || labelSettings.fontSize?.title || templateInfo.elements.title?.fontSize || 6
-      };
-
-      // Get content inclusion settings
-      const includeBarcode = document.getElementById('include-barcode')?.checked !== false;
-      const includeFnsku = document.getElementById('include-fnsku')?.checked !== false;
-      const includeSku = document.getElementById('include-sku')?.checked !== false;
-      const includeTitle = document.getElementById('include-title')?.checked !== false;
-
       // Add template info
-      previewContent.appendChild(templateInfo_div);
+      previewContent.appendChild(templateInfoDiv);
 
       // Add barcode if enabled
-      if (includeBarcode && templateInfo.elements.barcode) {
+      if (templateInfo.contentInclusion?.barcode !== false) {
         previewContent.appendChild(barcodeImg);
       }
 
-      // Add text elements based on template and settings
+      // Add text elements based on template
       const textContainer = document.createElement('div');
       textContainer.className = 'preview-text';
 
-      if (templateInfo.elements.fnsku && includeFnsku) {
+      // FNSKU text
+      if (templateInfo.contentInclusion?.fnsku !== false) {
         const fnskuText = document.createElement('div');
         fnskuText.className = 'preview-fnsku';
         fnskuText.textContent = sampleData.fnsku;
-        fnskuText.style.fontSize = `${customFontSizes.fnsku}px`;
-        fnskuText.style.fontWeight = templateInfo.elements.fnsku.bold ? 'bold' : 'normal';
+        fnskuText.style.fontSize = '8px';
         textContainer.appendChild(fnskuText);
       }
 
-      if (templateInfo.elements.sku && includeSku) {
+      // SKU text
+      if (templateInfo.contentInclusion?.sku !== false) {
         const skuText = document.createElement('div');
         skuText.className = 'preview-sku';
         skuText.textContent = `SKU: ${sampleData.sku}`;
-        skuText.style.fontSize = `${customFontSizes.sku}px`;
-        skuText.style.fontWeight = templateInfo.elements.sku.bold ? 'bold' : 'normal';
+        skuText.style.fontSize = '11px';
         textContainer.appendChild(skuText);
       }
 
-      if (templateInfo.elements.title && includeTitle) {
+      // Title text
+      if (templateInfo.contentInclusion?.title !== false) {
         const titleText = document.createElement('div');
         titleText.className = 'preview-title';
-        const maxLength = templateInfo.elements.title.maxLength || 50;
-        titleText.textContent = sampleData.title.length > maxLength ?
-          sampleData.title.substring(0, maxLength - 3) + '...' : sampleData.title;
-        titleText.style.fontSize = `${customFontSizes.title}px`;
+        titleText.textContent = sampleData.title.length > 50 ?
+          sampleData.title.substring(0, 47) + '...' : sampleData.title;
+        titleText.style.fontSize = '6px';
         textContainer.appendChild(titleText);
       }
 
       previewContent.appendChild(textContainer);
 
+      // Add quantity controls at bottom
+      const controlsBottom = document.createElement('div');
+      controlsBottom.className = 'preview-controls-bottom';
+      controlsBottom.style.cssText = 'display: flex; justify-content: center; align-items: center; margin-top: 8px; gap: 8px;';
+
+      const quantityLabel = document.createElement('label');
+      quantityLabel.textContent = 'Qty:';
+      quantityLabel.style.cssText = 'font-size: 11px; color: #666;';
+
+      const quantityInput = document.createElement('input');
+      quantityInput.type = 'number';
+      quantityInput.id = 'preview-quantity';
+      quantityInput.min = '1';
+      quantityInput.max = '1000';
+      quantityInput.value = '1';
+      quantityInput.style.cssText = 'width: 60px; padding: 2px 4px; font-size: 11px; border: 1px solid #ddd; border-radius: 3px;';
+
+      controlsBottom.appendChild(quantityLabel);
+      controlsBottom.appendChild(quantityInput);
+
+      // Assemble the complete preview
+      previewWrapper.appendChild(controlsTop);
+      previewWrapper.appendChild(previewContent);
+      previewWrapper.appendChild(controlsBottom);
+
       previewContainer.innerHTML = '';
-      previewContainer.appendChild(previewContent);
+      previewContainer.appendChild(previewWrapper);
 
     } catch (error) {
       console.error('Preview generation error:', error);
@@ -719,61 +1197,181 @@ class PopupController {
   }
 
   /**
-   * Save settings from panel
+   * Get persistent sample data
    */
-  async saveSettings() {
+  async getSampleData() {
     try {
-      const saveButton = document.getElementById('save-settings');
-      saveButton.disabled = true;
-      saveButton.textContent = 'Saving...';
-
-      // Collect settings from form
-      const newSettings = {
-        labelSettings: {
-          template: document.getElementById('default-template').value,
-          barcodeFormat: document.getElementById('default-barcode').value,
-          includeImage: document.getElementById('default-include-images').checked,
-          includeBarcode: document.getElementById('include-barcode').checked,
-          includeFnsku: document.getElementById('include-fnsku').checked,
-          includeSku: document.getElementById('include-sku').checked,
-          includeTitle: document.getElementById('include-title').checked,
-          autoOpenTabs: document.getElementById('auto-open-tabs').checked,
-          debugMode: document.getElementById('debug-mode').checked,
-          autoExtract: document.getElementById('auto-extract').checked,
-          fontSize: {
-            fnsku: parseInt(document.getElementById('fnsku-font-size').value) || 8,
-            sku: parseInt(document.getElementById('sku-font-size').value) || 11,
-            title: parseInt(document.getElementById('title-font-size').value) || 6
-          }
-        }
+      const stored = await chrome.storage.local.get(['sampleData']);
+      return stored.sampleData || {
+        sku: 'SAMPLE-SKU',
+        fnsku: 'X002SAMPLE',
+        asin: 'B0SAMPLE1',
+        title: 'Sample Product Title for Preview'
       };
+    } catch (error) {
+      console.error('Failed to get sample data:', error);
+      return {
+        sku: 'SAMPLE-SKU',
+        fnsku: 'X002SAMPLE',
+        asin: 'B0SAMPLE1',
+        title: 'Sample Product Title for Preview'
+      };
+    }
+  }
 
-      console.log('Saving settings:', newSettings);
+  /**
+   * Save sample data
+   */
+  async setSampleData(data) {
+    try {
+      await chrome.storage.local.set({ sampleData: data });
+    } catch (error) {
+      console.error('Failed to save sample data:', error);
+    }
+  }
 
-      // Save to background script
-      const response = await chrome.runtime.sendMessage({
-        action: 'saveSettings',
-        settings: newSettings
+  /**
+   * Open sample data editor modal
+   */
+  async openSampleDataEditor() {
+    try {
+      const currentData = await this.getSampleData();
+
+      // Create modal
+      const modal = document.createElement('div');
+      modal.className = 'sample-data-modal';
+      modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      `;
+
+      const modalContent = document.createElement('div');
+      modalContent.style.cssText = `
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        width: 300px;
+        max-width: 90vw;
+      `;
+
+      modalContent.innerHTML = `
+        <h3 style="margin: 0 0 16px 0; font-size: 16px;">Edit Sample Data</h3>
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; margin-bottom: 4px; font-size: 12px; font-weight: 500;">SKU *</label>
+          <input type="text" id="sample-sku" value="${currentData.sku}" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; margin-bottom: 4px; font-size: 12px; font-weight: 500;">FNSKU *</label>
+          <input type="text" id="sample-fnsku" value="${currentData.fnsku}" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;" pattern="^[A-Z0-9]{10}$">
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; margin-bottom: 4px; font-size: 12px; font-weight: 500;">ASIN</label>
+          <input type="text" id="sample-asin" value="${currentData.asin}" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;" pattern="^B[0-9A-Z]{9}$">
+        </div>
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; margin-bottom: 4px; font-size: 12px; font-weight: 500;">Product Title</label>
+          <input type="text" id="sample-title" value="${currentData.title}" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+          <button id="sample-cancel" style="padding: 6px 12px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer;">Cancel</button>
+          <button id="sample-save" style="padding: 6px 12px; border: 1px solid #007bff; background: #007bff; color: white; border-radius: 4px; cursor: pointer;">Save</button>
+        </div>
+      `;
+
+      modal.appendChild(modalContent);
+      document.body.appendChild(modal);
+
+      // Event handlers
+      document.getElementById('sample-cancel').addEventListener('click', () => {
+        modal.remove();
       });
 
-      console.log('Save response:', response);
+      document.getElementById('sample-save').addEventListener('click', async () => {
+        const newData = {
+          sku: document.getElementById('sample-sku').value.trim(),
+          fnsku: document.getElementById('sample-fnsku').value.trim().toUpperCase(),
+          asin: document.getElementById('sample-asin').value.trim().toUpperCase(),
+          title: document.getElementById('sample-title').value.trim()
+        };
 
-      if (response.success) {
-        this.currentSettings.labelSettings = newSettings.labelSettings;
-        this.updateUI();
-        this.showSuccess('Settings saved successfully');
-      } else {
-        this.showError('Failed to save settings: ' + (response.error || 'Unknown error'));
-      }
+        // Basic validation
+        if (!newData.sku || !newData.fnsku) {
+          alert('SKU and FNSKU are required');
+          return;
+        }
+
+        if (newData.fnsku.length !== 10) {
+          alert('FNSKU must be 10 characters');
+          return;
+        }
+
+        await this.setSampleData(newData);
+        await this.updatePreview();
+        modal.remove();
+        this.showSuccess('Sample data updated');
+      });
+
+      // Close on backdrop click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.remove();
+        }
+      });
+
     } catch (error) {
-      console.error('Failed to save settings:', error);
-      this.showError('Failed to save settings: ' + error.message);
-    } finally {
-      const saveButton = document.getElementById('save-settings');
-      if (saveButton) {
-        saveButton.disabled = false;
-        saveButton.textContent = 'Save Settings';
-      }
+      console.error('Failed to open sample data editor:', error);
+      this.showError('Failed to open editor');
+    }
+  }
+
+  /**
+   * Download PDF from preview
+   */
+  async downloadFromPreview() {
+    try {
+      const sampleData = await this.getSampleData();
+      const quantityInput = document.getElementById('preview-quantity');
+      const quantity = parseInt(quantityInput?.value) || 1;
+
+      // Get selected template ID
+      const templateId = await this.settingsManager.getSelectedTemplateId() || 'thermal_57x32';
+
+      // Generate PDF
+      const pdfBlob = await this.pdfGenerator.generateLabel(sampleData, templateId, quantity);
+
+      // Download
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${sampleData.sku}_label.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      // Add to download history
+      await this.addToDownloadHistory({
+        sku: sampleData.sku,
+        fnsku: sampleData.fnsku,
+        asin: sampleData.asin,
+        title: sampleData.title,
+        quantity: quantity,
+        timestamp: new Date().toISOString()
+      });
+
+      this.showSuccess(`✅ Generated ${quantity} label(s) for ${sampleData.sku}`);
+
+    } catch (error) {
+      console.error('Failed to download from preview:', error);
+      this.showError('Failed to generate PDF: ' + error.message);
     }
   }
 
@@ -786,39 +1384,11 @@ class PopupController {
     }
 
     try {
-      const defaultSettings = {
-        labelSettings: {
-          template: 'thermal_57x32',
-          barcodeFormat: 'CODE128',
-          includeImage: false,
-          includeBarcode: true,
-          includeFnsku: true,
-          includeSku: true,
-          includeTitle: true,
-          autoOpenTabs: false,
-          debugMode: false,
-          autoExtract: true,
-          fontSize: {
-            fnsku: 8,
-            sku: 11,
-            title: 6
-          }
-        }
-      };
-
-      const response = await chrome.runtime.sendMessage({
-        action: 'saveSettings',
-        settings: defaultSettings
-      });
-
-      if (response.success) {
-        this.currentSettings.labelSettings = defaultSettings.labelSettings;
-        this.populateSettingsPanel();
-        this.updateUI();
-        this.showSuccess('Settings reset to defaults');
-      } else {
-        this.showError('Failed to reset settings');
-      }
+      await this.settingsManager.resetToDefaults();
+      this.currentSettings = await this.settingsManager.getSettings();
+      await this.populateSettingsPanel();
+      this.updatePreview();
+      this.showSuccess('Settings reset to defaults');
     } catch (error) {
       console.error('Failed to reset settings:', error);
       this.showError('Failed to reset settings');
@@ -830,7 +1400,7 @@ class PopupController {
    */
   openHelpGuide() {
     chrome.tabs.create({
-      url: 'https://github.com/your-repo/amazon-fnsku-extension/wiki/user-guide'
+      url: 'https://github.com/prykris/amazon-smart-label-ext/wiki/user-guide'
     });
   }
 
@@ -854,10 +1424,10 @@ class PopupController {
    * Report issue
    */
   reportIssue() {
-    const issueUrl = 'https://github.com/your-repo/amazon-fnsku-extension/issues/new?' +
+    const issueUrl = 'https://github.com/prykris/amazon-smart-label-ext/issues/new?' +
       'template=bug_report.md&' +
       `title=Bug Report&` +
-      `body=**Extension Version:** ${this.extensionStatus.version}%0A` +
+      `body=**Extension Version:** 1.0.0%0A` +
       `**Browser:** ${navigator.userAgent}%0A` +
       `**Date:** ${new Date().toISOString()}%0A%0A` +
       `**Description:**%0A`;
@@ -870,7 +1440,7 @@ class PopupController {
    */
   openPrivacyPolicy() {
     chrome.tabs.create({
-      url: 'https://github.com/your-repo/amazon-fnsku-extension/blob/main/PRIVACY.md'
+      url: 'https://github.com/prykris/amazon-smart-label-ext/blob/main/PRIVACY.md'
     });
   }
 
@@ -879,7 +1449,7 @@ class PopupController {
    */
   openSupport() {
     chrome.tabs.create({
-      url: 'https://github.com/your-repo/amazon-fnsku-extension/discussions'
+      url: 'https://github.com/prykris/amazon-smart-label-ext/discussions'
     });
   }
 
@@ -1011,6 +1581,7 @@ class PopupController {
    */
   updateDownloadsList() {
     const downloadsList = document.getElementById('downloads-list');
+    if (!downloadsList) return;
 
     if (this.downloadHistory.length === 0) {
       downloadsList.innerHTML = `
@@ -1116,44 +1687,75 @@ class PopupController {
   }
 
   /**
-   * Setup settings tooltip
+   * Create a simple template with just a name prompt
    */
-  setupSettingsTooltip() {
-    const settingsTab = document.querySelector('.settings-tab');
-    if (settingsTab) {
-      this.updateSettingsTooltip();
+  async createSimpleTemplate() {
+    try {
+      const templateName = prompt('Enter template name:');
+      if (!templateName || !templateName.trim()) {
+        return;
+      }
+
+      // Use sensible defaults instead of reading from UI inputs
+      const width = 57;
+      const height = 32;
+      const units = 'mm';
+
+      // Create template with defaults
+      const templateData = {
+        name: templateName.trim(),
+        baseName: templateName.trim(),
+        width: width,
+        height: height,
+        units: units,
+        orientation: width > height ? 'landscape' : 'portrait',
+        contentInclusion: {
+          barcode: true,
+          fnsku: true,
+          sku: true,
+          title: true,
+          images: false
+        },
+        elements: this.generateBasicElements(width, height)
+      };
+
+      // Create the template
+      const savedTemplate = await this.templateManager.createTemplate(templateData);
+
+      // Set as selected template
+      await this.settingsManager.setSelectedTemplateId(savedTemplate.id);
+
+      // Update current settings cache
+      this.currentSettings = await this.settingsManager.getSettings();
+
+      // Update UI
+      await this.loadTemplates();
+      await this.updateTemplateUI();
+      await this.updatePreview();
+
+      this.showSuccess(`Template "${templateName}" created and selected!`);
+
+    } catch (error) {
+      console.error('Failed to create simple template:', error);
+      this.showError('Failed to create template: ' + error.message);
     }
   }
 
   /**
-   * Update settings tooltip with current settings
+   * Generate basic element positioning for a template
+   * @param {number} width - Template width
+   * @param {number} height - Template height
+   * @returns {Object} Elements configuration
    */
-  updateSettingsTooltip() {
-    const settingsTab = document.querySelector('.settings-tab');
-    const labelSettings = this.currentSettings.labelSettings || {};
+  generateBasicElements(width, height) {
+    const centerX = width / 2;
 
-    const tooltip = `Current Settings:
-Template: ${this.getTemplateName(labelSettings.template || 'thermal_57x32')}
-Barcode: ${labelSettings.barcodeFormat || 'CODE128'}
-Images: ${labelSettings.includeImage ? 'Yes' : 'No'}
-Auto-extract: ${labelSettings.autoExtract !== false ? 'Yes' : 'No'}`;
-
-    if (settingsTab) {
-      settingsTab.title = tooltip;
-    }
-  }
-
-  /**
-   * Get human-readable template name
-   */
-  getTemplateName(template) {
-    const templates = {
-      'thermal_57x32': 'Thermal 57x32mm',
-      'thermal_102x152': 'Thermal 102x152mm',
-      'a4_sheet': 'A4 Sheet',
-      'letter_sheet': 'Letter Sheet'
+    return {
+      barcode: { x: width * 0.1, y: height * 0.1, width: width * 0.8, height: height * 0.4 },
+      fnsku: { x: centerX, y: height * 0.6, fontSize: 8, align: 'center', bold: false },
+      sku: { x: centerX, y: height * 0.75, fontSize: 10, align: 'center', bold: true },
+      title: { x: centerX, y: height * 0.9, fontSize: 6, align: 'center', maxLength: 50 }
     };
-    return templates[template] || template;
   }
 }
 

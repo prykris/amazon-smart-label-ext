@@ -4,71 +4,32 @@
  */
 
 class PDFLabelGenerator {
-  constructor() {
+  constructor(templateManager = null) {
+    this.templateManager = templateManager;
     this.defaultSettings = {
-      template: 'thermal_57x32',
       barcodeFormat: 'CODE128',
-      fontSize: {
-        fnsku: 8,
-        sku: 11,
-        title: 6
-      },
       includeImage: false,
       margin: 2
     };
+  }
 
-    this.templates = {
-      thermal_57x32: {
-        name: 'Thermal 57x32mm',
-        width: 57,
-        height: 32,
-        orientation: 'landscape',
-        elements: {
-          barcode: { x: 4, y: 2, width: 49, height: 12 },
-          fnsku: { x: 28.5, y: 17, fontSize: 8, align: 'center', bold: false },
-          sku: { x: 28.5, y: 22, fontSize: 11, align: 'center', bold: true },
-          title: { x: 28.5, y: 26, fontSize: 6, align: 'center', maxLength: 50 }
-        }
-      },
+  /**
+   * Set template manager instance
+   * @param {TemplateManager} templateManager - Template manager instance
+   */
+  setTemplateManager(templateManager) {
+    this.templateManager = templateManager;
+  }
 
-      thermal_57x32_minimal: {
-        name: 'Thermal 57x32mm (Minimal)',
-        width: 57,
-        height: 32,
-        orientation: 'landscape',
-        elements: {
-          barcode: { x: 4, y: 4, width: 49, height: 16 },
-          fnsku: { x: 28.5, y: 24, fontSize: 10, align: 'center', bold: true }
-        }
-      },
-
-      shipping_4x6: {
-        name: 'Shipping 4"x6"',
-        width: 101.6,
-        height: 152.4,
-        orientation: 'portrait',
-        elements: {
-          barcode: { x: 10, y: 20, width: 81.6, height: 20 },
-          fnsku: { x: 50.8, y: 50, fontSize: 12, align: 'center', bold: false },
-          sku: { x: 50.8, y: 70, fontSize: 16, align: 'center', bold: true },
-          title: { x: 50.8, y: 90, fontSize: 10, align: 'center', maxLength: 80 },
-          image: { x: 10, y: 100, width: 30, height: 30 }
-        }
-      },
-
-      custom: {
-        name: 'Custom Size',
-        width: 57,
-        height: 32,
-        orientation: 'landscape',
-        elements: {
-          barcode: { x: 4, y: 2, width: 49, height: 12 },
-          fnsku: { x: 28.5, y: 17, fontSize: 8, align: 'center', bold: false },
-          sku: { x: 28.5, y: 22, fontSize: 11, align: 'center', bold: true },
-          title: { x: 28.5, y: 26, fontSize: 6, align: 'center', maxLength: 50 }
-        }
-      }
-    };
+  /**
+   * Ensure template manager is available
+   */
+  async ensureTemplateManager() {
+    if (!this.templateManager) {
+      // Create a new instance if not provided
+      this.templateManager = new TemplateManager();
+      await this.templateManager.init();
+    }
   }
 
   /**
@@ -79,8 +40,25 @@ class PDFLabelGenerator {
    * @returns {Promise<Blob>} PDF blob
    */
   async generateLabels(productData, quantity = 1, settings = {}) {
+    await this.ensureTemplateManager();
+    
     const config = { ...this.defaultSettings, ...settings };
-    const template = this.templates[config.template] || this.templates.thermal_57x32;
+    
+    // Get template from template manager
+    let template;
+    if (settings.templateId) {
+      template = await this.templateManager.getTemplate(settings.templateId);
+    } else if (settings.template) {
+      // Support legacy template object
+      template = settings.template;
+    } else {
+      // Use default template
+      template = await this.templateManager.getTemplate('thermal_57x32');
+    }
+
+    if (!template) {
+      throw new Error('Template not found');
+    }
 
     // Validate required data
     if (!productData.fnsku) {
@@ -111,6 +89,18 @@ class PDFLabelGenerator {
   }
 
   /**
+   * Generate a single label (convenience method)
+   * @param {Object} productData - Product data from extractor
+   * @param {string} templateId - Template ID to use
+   * @param {number} quantity - Number of labels to generate
+   * @returns {Promise<Blob>} PDF blob
+   */
+  async generateLabel(productData, templateId, quantity = 1) {
+    const doc = await this.generateLabels(productData, quantity, { templateId });
+    return doc.output('blob');
+  }
+
+  /**
    * Render a single label on the PDF
    * @param {jsPDF} doc - PDF document
    * @param {Object} template - Label template
@@ -120,9 +110,10 @@ class PDFLabelGenerator {
    */
   async renderLabel(doc, template, productData, barcodeDataURL, config) {
     const elements = template.elements;
+    const contentInclusion = config.contentInclusion || template.contentInclusion || {};
 
     // Render barcode
-    if (elements.barcode && barcodeDataURL && config.includeBarcode !== false) {
+    if (elements.barcode && barcodeDataURL && contentInclusion.barcode !== false) {
       doc.addImage(
         barcodeDataURL,
         'PNG',
@@ -134,7 +125,7 @@ class PDFLabelGenerator {
     }
 
     // Render FNSKU
-    if (elements.fnsku && config.includeFnsku !== false) {
+    if (elements.fnsku && contentInclusion.fnsku !== false) {
       const fnskuElement = { ...elements.fnsku };
       if (config.fontSize && config.fontSize.fnsku) {
         fnskuElement.fontSize = config.fontSize.fnsku;
@@ -143,7 +134,7 @@ class PDFLabelGenerator {
     }
 
     // Render SKU
-    if (elements.sku && productData.sku && config.includeSku !== false) {
+    if (elements.sku && productData.sku && contentInclusion.sku !== false) {
       const skuElement = { ...elements.sku };
       if (config.fontSize && config.fontSize.sku) {
         skuElement.fontSize = config.fontSize.sku;
@@ -153,7 +144,7 @@ class PDFLabelGenerator {
     }
 
     // Render title
-    if (elements.title && productData.title && config.includeTitle !== false) {
+    if (elements.title && productData.title && contentInclusion.title !== false) {
       const titleElement = { ...elements.title };
       if (config.fontSize && config.fontSize.title) {
         titleElement.fontSize = config.fontSize.title;
@@ -163,7 +154,7 @@ class PDFLabelGenerator {
     }
 
     // Render product image (if enabled and available)
-    if (elements.image && config.includeImage && productData.image) {
+    if (elements.image && contentInclusion.images && productData.image) {
       try {
         const imageData = await this.loadImage(productData.image);
         doc.addImage(
@@ -307,55 +298,70 @@ class PDFLabelGenerator {
   }
 
   /**
-   * Get available templates
-   * @returns {Object} Available templates
+   * Get available templates (delegate to template manager)
+   * @returns {Array} Available templates
    */
-  getTemplates() {
-    return Object.keys(this.templates).map(key => ({
-      id: key,
-      name: this.templates[key].name,
-      dimensions: `${this.templates[key].width}x${this.templates[key].height}mm`
-    }));
+  async getTemplates() {
+    await this.ensureTemplateManager();
+    return await this.templateManager.getAllTemplates();
   }
 
   /**
-   * Update custom template
-   * @param {Object} customTemplate - Custom template configuration
+   * Get template by ID (delegate to template manager)
+   * @param {string} templateId - Template ID
+   * @returns {Object|null} Template or null if not found
    */
-  updateCustomTemplate(customTemplate) {
-    this.templates.custom = {
-      ...this.templates.custom,
-      ...customTemplate
-    };
+  async getTemplateById(templateId) {
+    await this.ensureTemplateManager();
+    return await this.templateManager.getTemplate(templateId);
   }
 
   /**
-   * Validate template configuration
+   * Create template (delegate to template manager)
+   * @param {Object} templateData - Template data
+   * @returns {Object} Created template
+   */
+  async createTemplate(templateData) {
+    await this.ensureTemplateManager();
+    return await this.templateManager.createTemplate(templateData);
+  }
+
+  /**
+   * Update template (delegate to template manager)
+   * @param {string} templateId - Template ID
+   * @param {Object} templateData - Updated template data
+   * @returns {Object} Updated template
+   */
+  async updateTemplate(templateId, templateData) {
+    await this.ensureTemplateManager();
+    return await this.templateManager.updateTemplate(templateId, templateData);
+  }
+
+  /**
+   * Delete template (delegate to template manager)
+   * @param {string} templateId - Template ID
+   * @returns {boolean} True if deleted successfully
+   */
+  async deleteTemplate(templateId) {
+    await this.ensureTemplateManager();
+    return await this.templateManager.deleteTemplate(templateId);
+  }
+
+  /**
+   * Validate template (delegate to template manager)
    * @param {Object} template - Template to validate
    * @returns {Object} Validation result
    */
   validateTemplate(template) {
-    const validation = {
-      isValid: true,
-      errors: []
+    if (this.templateManager) {
+      return this.templateManager.validateTemplate(template);
+    }
+    
+    // Fallback basic validation
+    return {
+      isValid: !!(template.width && template.height && template.elements),
+      errors: template.width && template.height && template.elements ? [] : ['Invalid template structure']
     };
-
-    if (!template.width || template.width <= 0) {
-      validation.errors.push('Template width must be greater than 0');
-      validation.isValid = false;
-    }
-
-    if (!template.height || template.height <= 0) {
-      validation.errors.push('Template height must be greater than 0');
-      validation.isValid = false;
-    }
-
-    if (!template.elements || !template.elements.barcode) {
-      validation.errors.push('Template must include barcode element');
-      validation.isValid = false;
-    }
-
-    return validation;
   }
 }
 

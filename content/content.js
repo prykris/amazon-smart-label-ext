@@ -1,354 +1,248 @@
 /**
  * Main Content Script
- * Orchestrates the Amazon FNSKU Label Extension functionality
+ * Stateless client — fetches config from background at click time.
+ * No local SettingsManager or TemplateManager instances.
  */
 
 class AmazonFNSKUExtension {
   constructor() {
-    this.templateManager = null;
-    this.settingsManager = null;
     this.dataExtractor = null;
-    this.pdfGenerator = null;
-    this.uiController = null;
-    this.observer = null;
-    this.processedRows = new Set();
+    this.pdfGenerator  = null;
+    this.uiController  = null;
+    this.observer      = null;
+    // WeakRef-based tracking: DOM element → true, avoids stale SKU string issues
+    this.processedRows = new WeakMap();
     this.isInitialized = false;
+    this._keydownHandler = null;
+    this._keyupHandler   = null;
+    this._spaObserver    = null;
 
     this.init();
   }
 
-  /**
-   * Initialize the extension
-   */
   async init() {
     try {
-      // Wait for required libraries to load
-      await this.waitForLibraries();
+      await this._waitForLibraries();
 
-      // Initialize core services
-      this.templateManager = new TemplateManager();
-      await this.templateManager.init();
-
-      this.settingsManager = new SettingsManager();
-      await this.settingsManager.init();
-
-      // Initialize components with services
       this.dataExtractor = new AmazonDataExtractor();
-      this.pdfGenerator = new PDFLabelGenerator(this.templateManager, this.settingsManager);
-      this.uiController = new UIController(
-        this.dataExtractor,
-        this.pdfGenerator,
-        this.settingsManager,
-        this.templateManager
-      );
+      this.pdfGenerator  = new PDFLabelGenerator();
+      this.uiController  = new UIController(this.dataExtractor, this.pdfGenerator);
 
-      // Start observing DOM changes
-      this.startObserver();
-
-      // Initial scan for existing rows
-      this.scanAndInjectButtons();
+      this._startObserver();
+      this._scanAndInjectButtons();
 
       this.isInitialized = true;
-      console.log('Amazon FNSKU Extension initialized successfully');
-
+      console.log('Amazon FNSKU Extension initialized');
     } catch (error) {
       console.error('Failed to initialize Amazon FNSKU Extension:', error);
+      this._showInitError(error.message);
     }
   }
 
-  /**
-   * Wait for required libraries to be available
-   * @returns {Promise} Promise that resolves when libraries are loaded
-   */
-  waitForLibraries() {
+  // ─── Library Wait ──────────────────────────────────────────────────────────
+
+  _waitForLibraries() {
     return new Promise((resolve, reject) => {
-      const checkLibraries = () => {
-        if (window.jspdf && window.JsBarcode && window.TemplateManager && window.SettingsManager) {
-          resolve();
-        } else {
-          setTimeout(checkLibraries, 100);
-        }
-      };
+      const required = () =>
+        window.jspdf &&
+        window.JsBarcode &&
+        window.ElementRegistry &&
+        window.AmazonDataExtractor &&
+        window.PDFLabelGenerator &&
+        window.UIController;
 
-      checkLibraries();
+      if (required()) { resolve(); return; }
 
-      // Timeout after 10 seconds
-      setTimeout(() => {
-        if (!window.jspdf || !window.JsBarcode || !window.TemplateManager || !window.SettingsManager) {
-          reject(new Error('Required libraries or services failed to load'));
-        }
+      const interval = setInterval(() => {
+        if (required()) { clearInterval(interval); clearTimeout(timeout); resolve(); }
+      }, 100);
+
+      // Single timeout that properly cancels the interval and rejects
+      const timeout = setTimeout(() => {
+        clearInterval(interval);
+        reject(new Error('Required libraries failed to load within 10 seconds'));
       }, 10000);
     });
   }
 
-  /**
-   * Start the MutationObserver to watch for new product rows
-   */
-  startObserver() {
-    const observerConfig = {
-      childList: true,
-      subtree: true,
-      attributeFilter: ['data-sku']
-    };
+  _showInitError(message) {
+    const banner = document.createElement('div');
+    banner.style.cssText = [
+      'position:fixed', 'top:10px', 'right:10px', 'z-index:999999',
+      'background:#dc3545', 'color:#fff', 'padding:10px 16px',
+      'border-radius:6px', 'font-size:13px', 'font-family:sans-serif',
+      'box-shadow:0 2px 8px rgba(0,0,0,.3)'
+    ].join(';');
+    banner.textContent = `FNSKU Extension: ${message}`;
+    document.body?.appendChild(banner);
+    setTimeout(() => banner.remove(), 8000);
+  }
+
+  // ─── MutationObserver ─────────────────────────────────────────────────────
+
+  _startObserver() {
+    let debounceTimer = null;
 
     this.observer = new MutationObserver((mutations) => {
       let shouldScan = false;
 
-      mutations.forEach((mutation) => {
-        // Check for added nodes
+      for (const mutation of mutations) {
         if (mutation.addedNodes.length > 0) {
-          for (let node of mutation.addedNodes) {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              // Check if the added node or its descendants contain product rows
-              if (node.matches && node.matches('div[data-sku]')) {
-                shouldScan = true;
-                break;
-              } else if (node.querySelector && node.querySelector('div[data-sku]')) {
-                shouldScan = true;
-                break;
-              }
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType !== Node.ELEMENT_NODE) continue;
+            if (
+              node.matches?.('div[data-sku]') ||
+              node.querySelector?.('div[data-sku]')
+            ) {
+              shouldScan = true;
+              break;
             }
           }
         }
-
-        // Check for attribute changes on data-sku elements
         if (mutation.type === 'attributes' && mutation.attributeName === 'data-sku') {
           shouldScan = true;
         }
-      });
+        if (shouldScan) break;
+      }
 
       if (shouldScan) {
-        // Debounce the scanning to avoid excessive processing
-        this.debouncedScan();
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => this._scanAndInjectButtons(), 300);
       }
     });
 
-    this.observer.observe(document.body, observerConfig);
+    this.observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributeFilter: ['data-sku']
+    });
   }
 
-  /**
-   * Debounced scan function to avoid excessive processing
-   */
-  debouncedScan = this.debounce(() => {
-    this.scanAndInjectButtons();
-  }, 300);
+  // ─── Button Injection ──────────────────────────────────────────────────────
 
-  /**
-   * Scan for product rows and inject smart buttons
-   */
-  scanAndInjectButtons() {
-    if (!this.isInitialized) {
-      return;
-    }
+  _scanAndInjectButtons() {
+    if (!this.isInitialized) return;
 
     try {
-      // Find all product rows with data-sku attribute
       const productRows = document.querySelectorAll('div[data-sku]');
 
-      productRows.forEach(row => {
-        const sku = row.getAttribute('data-sku');
+      for (const row of productRows) {
+        // Track by DOM element reference (WeakMap) — handles duplicate SKUs correctly
+        if (this.processedRows.has(row)) continue;
 
-        // Skip if already processed
-        if (this.processedRows.has(sku)) {
-          return;
-        }
-
-        // Create our own row for the smart button
         try {
-          // Create and inject the smart button
           const smartButton = this.uiController.createSmartButton(row);
-
-          // Create a dedicated row for our button
-          const smartLabelRow = this.createSmartLabelRow(smartButton);
-
-          // Insert the row after the product row
-          row.parentNode.insertBefore(smartLabelRow, row.nextSibling);
-
-          // Mark as processed
-          this.processedRows.add(sku);
-
-          console.debug(`Injected smart button row for SKU: ${sku}`);
-
+          const labelRow    = this._createLabelRow(smartButton);
+          row.parentNode.insertBefore(labelRow, row.nextSibling);
+          this.processedRows.set(row, true);
         } catch (error) {
-          console.warn(`Failed to inject button for SKU ${sku}:`, error);
+          console.warn('Failed to inject button for row:', error);
         }
-      });
-
+      }
     } catch (error) {
       console.error('Error during button injection:', error);
     }
   }
 
-  /**
-   * Create a dedicated row for the smart label button
-   * @param {HTMLElement} smartButton - Smart button container
-   * @returns {HTMLElement} Smart label row element
-   */
-  createSmartLabelRow(smartButton) {
-    const smartLabelRow = document.createElement('div');
-    smartLabelRow.className = 'smart-label-row';
-    smartLabelRow.style.cssText = `
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      padding: 8px 16px;
-      background: #f8f9fa;
-      border-top: 1px solid #e9ecef;
-      margin-top: 2px;
-      border-radius: 4px;
-      width: 100%;
-      box-sizing: border-box;
-    `;
+  _createLabelRow(smartButton) {
+    const row = document.createElement('div');
+    row.className = 'smart-label-row';
+    row.style.cssText = [
+      'display:flex', 'align-items:center', 'justify-content:flex-start',
+      'padding:8px 16px', 'background:#f8f9fa', 'border-top:1px solid #e9ecef',
+      'margin-top:2px', 'border-radius:4px', 'width:100%', 'box-sizing:border-box'
+    ].join(';');
 
-    // Add a label for the button
     const label = document.createElement('span');
     label.textContent = 'FNSKU Label: ';
-    label.style.cssText = `
-      font-size: 12px;
-      color: #666;
-      margin-right: 8px;
-      font-weight: 500;
-    `;
+    label.style.cssText = 'font-size:12px;color:#666;margin-right:8px;font-weight:500;';
 
-    smartLabelRow.appendChild(label);
-    smartLabelRow.appendChild(smartButton);
-
-    return smartLabelRow;
+    row.appendChild(label);
+    row.appendChild(smartButton);
+    return row;
   }
 
-  /**
-   * Debounce utility function
-   * @param {Function} func - Function to debounce
-   * @param {number} wait - Wait time in milliseconds
-   * @returns {Function} Debounced function
-   */
-  debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-      const later = () => {
-        clearTimeout(timeout);
-        func(...args);
-      };
-      clearTimeout(timeout);
-      timeout = setTimeout(later, wait);
-    };
+  // ─── SPA Navigation ───────────────────────────────────────────────────────
+
+  handlePageChange() {
+    // processedRows is a WeakMap — entries auto-expire when DOM nodes are GC'd.
+    // Just re-scan after navigation delay.
+    setTimeout(() => {
+      if (this.isInitialized) this._scanAndInjectButtons();
+    }, 1000);
   }
 
-  /**
-   * Check if we're on a relevant Amazon Seller Central page
-   * @returns {boolean} True if on a relevant page
-   */
-  isRelevantPage() {
-    const url = window.location.href;
-    const relevantPaths = [
-      '/inventory',
-      '/skucentral',
-      '/fba/profitability',
-      '/reportcentral',
-      '/restockInventory'
-    ];
+  // ─── Cleanup ──────────────────────────────────────────────────────────────
 
-    return relevantPaths.some(path => url.includes(path));
-  }
-
-  /**
-   * Clean up when extension is disabled or page unloads
-   */
   cleanup() {
     if (this.observer) {
       this.observer.disconnect();
       this.observer = null;
     }
 
-    // Remove injected buttons and rows
-    const injectedButtons = document.querySelectorAll('.smart-label-container');
-    injectedButtons.forEach(button => button.remove());
+    // Remove injected UI elements
+    document.querySelectorAll('.smart-label-container').forEach(el => el.remove());
+    document.querySelectorAll('.smart-label-row').forEach(el => el.remove());
 
-    const injectedRows = document.querySelectorAll('.smart-label-row');
-    injectedRows.forEach(row => row.remove());
-
-    // Close any open dialogs
     if (this.uiController) {
-      this.uiController.closeConfigurationDialog();
+      this.uiController.cleanup();
+      this.uiController = null;
     }
 
-    // Cleanup services
-    if (this.settingsManager) {
-      this.settingsManager.cleanup();
-    }
-
-    this.processedRows.clear();
     this.isInitialized = false;
-
     console.log('Amazon FNSKU Extension cleaned up');
   }
-
-  /**
-   * Handle page navigation
-   */
-  handlePageChange() {
-    // Clear processed rows on page change
-    this.processedRows.clear();
-
-    // Re-scan after a short delay to allow page to load
-    setTimeout(() => {
-      if (this.isRelevantPage()) {
-        this.scanAndInjectButtons();
-      }
-    }, 1000);
-  }
 }
 
-// Initialize extension when DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    window.amazonFNSKUExtension = new AmazonFNSKUExtension();
-  });
-} else {
-  window.amazonFNSKUExtension = new AmazonFNSKUExtension();
-}
+// ─── Bootstrap ────────────────────────────────────────────────────────────────
 
-// Handle page navigation (for SPAs)
-let lastUrl = location.href;
-new MutationObserver(() => {
-  const url = location.href;
-  if (url !== lastUrl) {
-    lastUrl = url;
-    if (window.amazonFNSKUExtension) {
-      window.amazonFNSKUExtension.handlePageChange();
-    }
-  }
-}).observe(document, { subtree: true, childList: true });
-
-// Cleanup on page unload
-window.addEventListener('beforeunload', () => {
+function bootstrap() {
   if (window.amazonFNSKUExtension) {
     window.amazonFNSKUExtension.cleanup();
   }
+  window.amazonFNSKUExtension = new AmazonFNSKUExtension();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrap);
+} else {
+  bootstrap();
+}
+
+// SPA navigation detection — stored so we can disconnect on cleanup
+let _lastUrl = location.href;
+const _spaObserver = new MutationObserver(() => {
+  const url = location.href;
+  if (url !== _lastUrl) {
+    _lastUrl = url;
+    window.amazonFNSKUExtension?.handlePageChange();
+  }
+});
+_spaObserver.observe(document, { subtree: true, childList: true });
+
+window.addEventListener('beforeunload', () => {
+  window.amazonFNSKUExtension?.cleanup();
+  _spaObserver.disconnect();
 });
 
-// Handle extension disable/enable and settings updates
+// Messages from background
 chrome.runtime.onMessage?.addListener((request, sender, sendResponse) => {
+  const ext = window.amazonFNSKUExtension;
+
   if (request.action === 'disable') {
-    if (window.amazonFNSKUExtension) {
-      window.amazonFNSKUExtension.cleanup();
-    }
+    ext?.cleanup();
+
   } else if (request.action === 'enable') {
-    if (!window.amazonFNSKUExtension || !window.amazonFNSKUExtension.isInitialized) {
-      window.amazonFNSKUExtension = new AmazonFNSKUExtension();
-    }
-  } else if (request.action === 'settingsUpdated') {
-    // Notify components about settings update
-    if (window.amazonFNSKUExtension && window.amazonFNSKUExtension.isInitialized) {
-      if (window.amazonFNSKUExtension.settingsManager) {
-        // Reload settings from storage
-        window.amazonFNSKUExtension.settingsManager.loadSettings();
-      }
-      if (window.amazonFNSKUExtension.uiController) {
-        // Update UI controller settings
-        window.amazonFNSKUExtension.uiController.handleSettingsUpdate(request.settings);
-      }
-    }
+    if (!ext || !ext.isInitialized) bootstrap();
+
+  } else if (request.action === 'stateUpdated') {
+    // Background pushed fresh state — content script is stateless so nothing to cache,
+    // but notify UIController in case it holds a reference for the config dialog
+    ext?.uiController?.onStateUpdated?.(request.settings, request.templates);
+
+  } else if (request.action === 'ping') {
+    sendResponse({ success: true });
+    return;
   }
 
   sendResponse({ success: true });

@@ -15,26 +15,18 @@ class TemplateManager {
         height: 32,
         units: 'mm',
         orientation: 'landscape',
-        elements: {
-          barcode: { x: 4, y: 2, width: 49, height: 12 },
-          fnsku: { x: 28.5, y: 17, fontSize: 8, align: 'center', bold: false },
-          sku: { x: 28.5, y: 22, fontSize: 11, align: 'center', bold: true },
-          title: { x: 28.5, y: 26, fontSize: 6, align: 'center', maxLength: 50 },
-          condition: { x: 2, y: 30, fontSize: 5, align: 'left', bold: false }
-        },
-        contentInclusion: {
-          barcode: true,
-          fnsku: true,
-          sku: true,
-          title: true,
-          images: false,
-          condition: true
-        },
-        conditionSettings: {
-          position: 'bottom-left', // 'bottom-left', 'bottom-right', 'title-prefix'
-          text: 'NEW',
-          enabled: true
-        },
+        elements: [
+          { id: 'b1', type: 'barcode',   dataField: 'fnsku',     enabled: true,
+            x: 4,    y: 2,  width: 49, height: 12, format: 'CODE128' },
+          { id: 't1', type: 'data_text', dataField: 'fnsku',     enabled: true,
+            x: 28.5, y: 17, fontSize: 8,  align: 'center', bold: false },
+          { id: 't2', type: 'data_text', dataField: 'sku',       enabled: true,
+            x: 28.5, y: 22, fontSize: 11, align: 'center', bold: true },
+          { id: 't3', type: 'data_text', dataField: 'title',     enabled: true,
+            x: 28.5, y: 26, fontSize: 6,  align: 'center', maxLength: 50 },
+          { id: 't4', type: 'data_text', dataField: 'condition', enabled: true,
+            x: 2,    y: 30, fontSize: 5,  align: 'left' }
+        ],
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z'
       },
@@ -48,24 +40,14 @@ class TemplateManager {
         height: 32,
         units: 'mm',
         orientation: 'landscape',
-        elements: {
-          barcode: { x: 4, y: 4, width: 49, height: 16 },
-          fnsku: { x: 28.5, y: 24, fontSize: 10, align: 'center', bold: true },
-          condition: { x: 2, y: 30, fontSize: 5, align: 'left', bold: false }
-        },
-        contentInclusion: {
-          barcode: true,
-          fnsku: true,
-          sku: false,
-          title: false,
-          images: false,
-          condition: true
-        },
-        conditionSettings: {
-          position: 'bottom-left',
-          text: 'NEW',
-          enabled: true
-        },
+        elements: [
+          { id: 'b1', type: 'barcode',   dataField: 'fnsku', enabled: true,
+            x: 4,    y: 4,  width: 49, height: 16, format: 'CODE128' },
+          { id: 't1', type: 'data_text', dataField: 'fnsku', enabled: true,
+            x: 28.5, y: 24, fontSize: 10, align: 'center', bold: true },
+          { id: 't2', type: 'data_text', dataField: 'condition', enabled: true,
+            x: 2,    y: 30, fontSize: 5,  align: 'left' }
+        ],
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z'
       },
@@ -75,31 +57,24 @@ class TemplateManager {
         name: 'Shipping',
         baseName: 'Shipping',
         userCreated: false,
-        width: 4,
-        height: 6,
-        units: 'in',
+        width: 101.6,
+        height: 152.4,
+        units: 'mm',
         orientation: 'portrait',
-        elements: {
-          barcode: { x: 10, y: 20, width: 81.6, height: 20 },
-          fnsku: { x: 50.8, y: 50, fontSize: 12, align: 'center', bold: false },
-          sku: { x: 50.8, y: 70, fontSize: 16, align: 'center', bold: true },
-          title: { x: 50.8, y: 90, fontSize: 10, align: 'center', maxLength: 80 },
-          image: { x: 10, y: 100, width: 30, height: 30 },
-          condition: { x: 10, y: 140, fontSize: 8, align: 'left', bold: false }
-        },
-        contentInclusion: {
-          barcode: true,
-          fnsku: true,
-          sku: true,
-          title: true,
-          images: true,
-          condition: true
-        },
-        conditionSettings: {
-          position: 'bottom-left',
-          text: 'NEW',
-          enabled: true
-        },
+        elements: [
+          { id: 'b1', type: 'barcode',   dataField: 'fnsku', enabled: true,
+            x: 10, y: 20, width: 81.6, height: 20, format: 'CODE128' },
+          { id: 't1', type: 'data_text', dataField: 'fnsku', enabled: true,
+            x: 50.8, y: 50, fontSize: 12, align: 'center', bold: false },
+          { id: 't2', type: 'data_text', dataField: 'sku',   enabled: true,
+            x: 50.8, y: 70, fontSize: 16, align: 'center', bold: true },
+          { id: 't3', type: 'data_text', dataField: 'title', enabled: true,
+            x: 50.8, y: 90, fontSize: 10, align: 'center', maxLength: 80 },
+          { id: 'i1', type: 'image',                         enabled: true,
+            x: 10, y: 100, width: 30, height: 30 },
+          { id: 't4', type: 'data_text', dataField: 'condition', enabled: true,
+            x: 10, y: 140, fontSize: 8, align: 'left' }
+        ],
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z'
       }
@@ -209,8 +184,8 @@ class TemplateManager {
     // Add to user templates
     this.userTemplates[templateId] = template;
 
-    // Save to storage
-    await this.saveUserTemplates();
+    // Save to storage (own key)
+    await this.saveUserTemplate(template);
 
     // Emit event
     this.emit('templateCreated', template);
@@ -249,8 +224,8 @@ class TemplateManager {
 
     this.userTemplates[templateId] = updatedTemplate;
 
-    // Save to storage
-    await this.saveUserTemplates();
+    // Save to storage (own key)
+    await this.saveUserTemplate(updatedTemplate);
 
     // Emit event
     this.emit('templateUpdated', updatedTemplate);
@@ -274,8 +249,8 @@ class TemplateManager {
     const template = { ...this.userTemplates[templateId] };
     delete this.userTemplates[templateId];
 
-    // Save to storage
-    await this.saveUserTemplates();
+    // Remove from storage
+    await this.removeUserTemplate(templateId);
 
     // Emit event
     this.emit('templateDeleted', template);
@@ -316,83 +291,59 @@ class TemplateManager {
       validation.isValid = false;
     }
 
-    // Elements validation
-    if (!template.elements || typeof template.elements !== 'object') {
-      validation.errors.push('Template elements are required');
+    // Elements validation — array of typed instances
+    if (!Array.isArray(template.elements) || template.elements.length === 0) {
+      validation.errors.push('Template elements must be a non-empty array');
       validation.isValid = false;
     } else {
-      // At least barcode or fnsku should be present
-      if (!template.elements.barcode && !template.elements.fnsku) {
-        validation.errors.push('Template must include at least barcode or FNSKU element');
-        validation.isValid = false;
-      }
+      const knownTypes = ['barcode', 'data_text', 'static_text', 'image'];
 
-      // Validate element positions
-      Object.entries(template.elements).forEach(([elementName, element]) => {
-        if (typeof element !== 'object') {
-          validation.errors.push(`Element ${elementName} must be an object`);
+      template.elements.forEach((element, index) => {
+        const label = `Element[${index}]`;
+
+        if (!element.id) {
+          validation.errors.push(`${label} must have an id`);
           validation.isValid = false;
-          return;
+        }
+
+        if (!element.type || !knownTypes.includes(element.type)) {
+          validation.errors.push(`${label} type must be one of: ${knownTypes.join(', ')}`);
+          validation.isValid = false;
         }
 
         if (typeof element.x !== 'number' || element.x < 0) {
-          validation.errors.push(`Element ${elementName} x position must be a non-negative number`);
+          validation.errors.push(`${label} x must be a non-negative number`);
           validation.isValid = false;
         }
 
         if (typeof element.y !== 'number' || element.y < 0) {
-          validation.errors.push(`Element ${elementName} y position must be a non-negative number`);
+          validation.errors.push(`${label} y must be a non-negative number`);
           validation.isValid = false;
         }
 
-        // Validate element-specific properties
-        if (['barcode', 'image'].includes(elementName)) {
+        if (['barcode', 'image'].includes(element.type)) {
           if (typeof element.width !== 'number' || element.width <= 0) {
-            validation.errors.push(`Element ${elementName} width must be a positive number`);
+            validation.errors.push(`${label} (${element.type}) width must be a positive number`);
             validation.isValid = false;
           }
           if (typeof element.height !== 'number' || element.height <= 0) {
-            validation.errors.push(`Element ${elementName} height must be a positive number`);
+            validation.errors.push(`${label} (${element.type}) height must be a positive number`);
             validation.isValid = false;
           }
         }
 
-        if (['fnsku', 'sku', 'title', 'condition'].includes(elementName)) {
+        if (['data_text', 'static_text'].includes(element.type)) {
           if (typeof element.fontSize !== 'number' || element.fontSize <= 0) {
-            validation.errors.push(`Element ${elementName} fontSize must be a positive number`);
+            validation.errors.push(`${label} (${element.type}) fontSize must be a positive number`);
             validation.isValid = false;
           }
         }
       });
-    }
 
-    // Content inclusion validation
-    if (!template.contentInclusion || typeof template.contentInclusion !== 'object') {
-      validation.errors.push('Template contentInclusion is required');
-      validation.isValid = false;
-    }
-
-    // Condition settings validation (optional)
-    if (template.conditionSettings) {
-      if (typeof template.conditionSettings !== 'object') {
-        validation.errors.push('Template conditionSettings must be an object');
+      const hasContent = template.elements.some(e => e.type === 'barcode' || e.type === 'data_text');
+      if (!hasContent) {
+        validation.errors.push('Template must include at least one barcode or data_text element');
         validation.isValid = false;
-      } else {
-        const validPositions = ['bottom-left', 'bottom-right', 'title-prefix'];
-        if (template.conditionSettings.position && !validPositions.includes(template.conditionSettings.position)) {
-          validation.errors.push(`Condition position must be one of: ${validPositions.join(', ')}`);
-          validation.isValid = false;
-        }
-
-        if (template.conditionSettings.text && typeof template.conditionSettings.text !== 'string') {
-          validation.errors.push('Condition text must be a string');
-          validation.isValid = false;
-        }
-
-        if (template.conditionSettings.enabled !== undefined && typeof template.conditionSettings.enabled !== 'boolean') {
-          validation.errors.push('Condition enabled must be a boolean');
-          validation.isValid = false;
-        }
       }
     }
 
@@ -409,12 +360,19 @@ class TemplateManager {
   }
 
   /**
-   * Load user templates from storage
+   * Load user templates from storage.
+   * Each template stored under its own key (fnsku_template_{id}) to stay
+   * within chrome.storage.sync's 8KB per-item limit.
    */
   async loadUserTemplates() {
     try {
-      const result = await chrome.storage.sync.get(['fnsku_user_templates']);
-      this.userTemplates = result.fnsku_user_templates || {};
+      const allData = await chrome.storage.sync.get(null);
+      this.userTemplates = {};
+      for (const [key, value] of Object.entries(allData)) {
+        if (key.startsWith('fnsku_template_') && value && value.id) {
+          this.userTemplates[value.id] = value;
+        }
+      }
     } catch (error) {
       console.error('Failed to load user templates:', error);
       this.userTemplates = {};
@@ -422,15 +380,25 @@ class TemplateManager {
   }
 
   /**
-   * Save user templates to storage
+   * Save a single user template to its own storage key.
    */
-  async saveUserTemplates() {
+  async saveUserTemplate(template) {
     try {
-      await chrome.storage.sync.set({
-        fnsku_user_templates: this.userTemplates
-      });
+      await chrome.storage.sync.set({ [`fnsku_template_${template.id}`]: template });
     } catch (error) {
-      console.error('Failed to save user templates:', error);
+      console.error('Failed to save user template:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove a single user template from storage.
+   */
+  async removeUserTemplate(templateId) {
+    try {
+      await chrome.storage.sync.remove(`fnsku_template_${templateId}`);
+    } catch (error) {
+      console.error('Failed to remove user template:', error);
       throw error;
     }
   }
@@ -521,9 +489,10 @@ class TemplateManager {
     await this.ensureInitialized();
 
     const deletedTemplates = { ...this.userTemplates };
+    const ids = Object.keys(this.userTemplates);
     this.userTemplates = {};
 
-    await this.saveUserTemplates();
+    await Promise.all(ids.map(id => this.removeUserTemplate(id)));
 
     this.emit('templatesCleared', deletedTemplates);
 
@@ -567,5 +536,6 @@ class TemplateManager {
   }
 }
 
-// Export for use in other modules
-window.TemplateManager = TemplateManager;
+// Export for both content script (window) and service worker (self) contexts
+if (typeof window !== 'undefined') window.TemplateManager = TemplateManager;
+if (typeof self   !== 'undefined') self.TemplateManager   = TemplateManager;

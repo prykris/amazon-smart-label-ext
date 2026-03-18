@@ -50,9 +50,9 @@
           <form id="manual-entry-form" class="compact-form">
             <div class="form-row">
               <div class="form-group">
-                <label for="manual-template">Template Override</label>
-                <select id="manual-template" class="form-input">
-                  <option value="">Use Global Template</option>
+                <label for="manual-template-select">Template Override</label>
+                <select id="manual-template-select" class="form-input">
+                  <option value="">Use Active Template</option>
                 </select>
               </div>
             </div>
@@ -95,7 +95,7 @@
             <div class="form-actions">
               <button type="button" id="load-sample" class="secondary-btn">Sample</button>
               <button type="button" id="clear-form" class="secondary-btn">Clear</button>
-              <button type="submit" id="generate-manual" class="primary-btn">Generate Label</button>
+              <button type="button" id="generate-manual" class="primary-btn">Generate Label</button>
             </div>
           </form>
         </div>
@@ -105,169 +105,93 @@
       <div id="settings-tab" class="tab-content">
         <div class="settings-section">
 
-          <!-- Label Generation Section -->
-          <div class="settings-group">
-            <h3 class="group-title">Label Generation</h3>
-
-            <div class="setting-group">
-              <label>Template</label>
-              <div class="template-selector">
-                <div class="hybrid-selector">
-                  <input type="text" id="template-name-input" class="setting-input template-name-input"
-                    placeholder="Template name">
-                  <button id="template-dropdown-btn" class="template-dropdown-btn" title="Select Template">▼</button>
-                  <div id="template-dropdown" class="template-dropdown-menu" style="display: none;">
-                    <!-- Templates will be populated here -->
-                  </div>
-                </div>
-                <button id="create-template-btn" class="template-btn" title="Create New Template">+</button>
+          <!-- Template Selector -->
+          <div class="template-selector">
+            <div class="hybrid-selector">
+              <input type="text" id="template-name-input" class="setting-input template-name-input"
+                placeholder="Template name" readonly>
+              <button id="template-dropdown-btn" class="template-dropdown-btn" title="Select Template">▼</button>
+              <div id="template-dropdown" class="template-dropdown-menu" style="display: none;">
+                <!-- Templates populated dynamically -->
               </div>
             </div>
+            <button id="create-template-btn" class="template-btn" title="Create New Template">+</button>
+          </div>
 
-            <div class="setting-group">
-              <div class="dimension-controls">
-                <div class="dimension-row">
-                  <div class="dimension-input-group">
-                    <label for="template-width">Width:</label>
-                    <input type="number" id="template-width" class="setting-input dimension-input" min="10" max="500"
-                      step="0.1" value="57">
-                  </div>
-                  <div class="dimension-input-group">
-                    <label for="template-height">Height:</label>
-                    <input type="number" id="template-height" class="setting-input dimension-input" min="10" max="500"
-                      step="0.1" value="32">
-                  </div>
-                  <div class="dimension-input-group">
-                    <label for="template-units">Units:</label>
-                    <select id="template-units" class="setting-input dimension-input">
-                      <option value="mm">mm</option>
-                      <option value="in">inches</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
+          <div class="dimension-row">
+            <div class="dimension-input-group">
+              <label for="template-width">Width:</label>
+              <input type="number" id="template-width" class="setting-input dimension-input" min="10" max="500"
+                step="0.1" value="57">
             </div>
-
-            <div class="setting-group">
-              <div id="label-preview" class="label-preview" style="margin-top: 8px;">
-                <div class="preview-loading">Loading preview...</div>
-              </div>
+            <div class="dimension-input-group">
+              <label for="template-height">Height:</label>
+              <input type="number" id="template-height" class="setting-input dimension-input" min="10" max="500"
+                step="0.1" value="32">
             </div>
+            <div class="dimension-input-group">
+              <label for="template-units">Units:</label>
+              <select id="template-units" class="setting-input dimension-input">
+                <option value="mm">mm</option>
+                <option value="in">inches</option>
+              </select>
+            </div>
+          </div>
 
-            <div class="setting-group">
+          <!-- Preview -->
+          <div id="label-preview" class="label-preview">
+            <div class="preview-loading">Loading preview…</div>
+          </div>
+
+          <!-- Element Inspector -->
+          <div class="element-selector-row">
+            <select id="element-select" class="setting-input element-select"></select>
+            <button id="add-element-btn" class="template-btn" title="Add Element">+</button>
+          </div>
+          <div id="inspector-panel" class="inspector-panel">
+            <p class="inspector-empty">Select an element to edit</p>
+          </div>
+
+          <!-- Global Settings -->
+          <form id="settings-form" class="settings-form">
+            <div class="setting-row">
               <label for="default-barcode">Barcode Format</label>
-              <select id="default-barcode" class="setting-input">
+              <select id="default-barcode" class="setting-input setting-input-inline">
                 <option value="CODE128">CODE128</option>
                 <option value="CODE39">CODE39</option>
                 <option value="EAN13">EAN13</option>
               </select>
             </div>
 
-            <div class="setting-group">
-              <label for="pdf-dpi">PDF Quality (DPI)</label>
-              <select id="pdf-dpi" class="setting-input">
+            <div class="setting-row">
+              <label for="pdf-dpi">PDF Quality</label>
+              <select id="pdf-dpi" class="setting-input setting-input-inline">
                 <option value="150">150 DPI (Fast)</option>
                 <option value="300">300 DPI (Standard)</option>
                 <option value="600">600 DPI (High Quality)</option>
               </select>
             </div>
 
-            <div class="setting-group">
-              <label>Font Sizes</label>
-              <div class="font-size-controls">
-                <div class="font-size-row">
-                  <label for="fnsku-font-size">FNSKU:</label>
-                  <input type="number" id="fnsku-font-size" class="setting-input font-size-input" min="4" max="20"
-                    value="8">
-                </div>
-                <div class="font-size-row">
-                  <label for="sku-font-size">SKU:</label>
-                  <input type="number" id="sku-font-size" class="setting-input font-size-input" min="4" max="20"
-                    value="11">
-                </div>
-                <div class="font-size-row">
-                  <label for="title-font-size">Title:</label>
-                  <input type="number" id="title-font-size" class="setting-input font-size-input" min="4" max="20"
-                    value="6">
-                </div>
-              </div>
+            <div class="extension-options">
+              <label class="checkbox-label">
+                <input type="checkbox" id="auto-extract">
+                <span class="checkbox-text">Auto-extract on page load</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="auto-open-tabs">
+                <span class="checkbox-text">Auto-open tabs</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="debug-mode">
+                <span class="checkbox-text">Debug mode</span>
+              </label>
             </div>
-
-            <div class="setting-group">
-              <label>Content</label>
-              <div class="content-options">
-                <label class="checkbox-label">
-                  <input type="checkbox" id="include-barcode" checked>
-                  <span class="checkbox-text">Barcode</span>
-                </label>
-                <label class="checkbox-label">
-                  <input type="checkbox" id="include-fnsku" checked>
-                  <span class="checkbox-text">FNSKU</span>
-                </label>
-                <label class="checkbox-label">
-                  <input type="checkbox" id="include-sku" checked>
-                  <span class="checkbox-text">SKU</span>
-                </label>
-                <label class="checkbox-label">
-                  <input type="checkbox" id="include-title" checked>
-                  <span class="checkbox-text">Title</span>
-                </label>
-                <label class="checkbox-label">
-                  <input type="checkbox" id="default-include-images">
-                  <span class="checkbox-text">Images</span>
-                </label>
-                <label class="checkbox-label">
-                  <input type="checkbox" id="include-condition" checked>
-                  <span class="checkbox-text">Condition</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="setting-group">
-              <label>Amazon Condition</label>
-              <div class="condition-settings">
-                <div class="condition-row">
-                  <label for="condition-text">Text:</label>
-                  <input type="text" id="condition-text" class="setting-input condition-input" value="NEW" maxlength="10">
-                </div>
-                <div class="condition-row">
-                  <label for="condition-position">Position:</label>
-                  <select id="condition-position" class="setting-input condition-input">
-                    <option value="bottom-left">Bottom Left</option>
-                    <option value="bottom-right">Bottom Right</option>
-                    <option value="title-prefix">Title Prefix</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- App Behavior Section -->
-          <div class="settings-group">
-            <h3 class="group-title">App Behavior</h3>
-
-            <div class="setting-group">
-              <div class="extension-options">
-                <label class="checkbox-label">
-                  <input type="checkbox" id="auto-extract">
-                  <span class="checkbox-text">Auto-extract on page load</span>
-                </label>
-                <label class="checkbox-label">
-                  <input type="checkbox" id="auto-open-tabs">
-                  <span class="checkbox-text">Auto-open tabs</span>
-                </label>
-                <label class="checkbox-label">
-                  <input type="checkbox" id="debug-mode">
-                  <span class="checkbox-text">Debug mode</span>
-                </label>
-              </div>
-            </div>
-          </div>
+          </form>
 
           <div class="settings-actions">
             <button id="reset-settings" class="secondary-btn">Reset</button>
             <div class="auto-save-indicator" id="auto-save-indicator" style="display: none;">
-              <span class="saving-text">Saving...</span>
+              <span class="saving-text">Saving…</span>
             </div>
           </div>
         </div>
@@ -275,13 +199,10 @@
     </div>
   </div>
 
-
   <script src="../lib/jspdf.umd.min.js"></script>
   <script src="../lib/jsbarcode.all.min.js"></script>
-  <script src="../content/template-manager.js"></script>
-  <script src="../content/settings-manager.js"></script>
+  <script src="../content/element-registry.js"></script>
   <script src="../content/pdf-generator.js"></script>
-  <script src="template-editor.js"></script>
   <script src="popup.js"></script>
 </body>
 

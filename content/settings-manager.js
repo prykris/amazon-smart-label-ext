@@ -497,5 +497,6 @@ class SettingsManager {
   }
 }
 
-// Export for use in other modules
-window.SettingsManager = SettingsManager;
+// Export for both content script (window) and service worker (self) contexts
+if (typeof window !== 'undefined') window.SettingsManager = SettingsManager;
+if (typeof self   !== 'undefined') self.SettingsManager   = SettingsManager;
